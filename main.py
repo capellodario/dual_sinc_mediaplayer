@@ -130,4 +130,4 @@ if __name__ == "__main__":
         else:
             print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nell'unità USB.")
     else:
-        print("Nessuna unità USB trovata.")g
+        print("Nessuna unità USB trovata.")
