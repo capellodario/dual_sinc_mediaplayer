@@ -7,11 +7,6 @@ import glob
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
 
-DISPLAY_HDMI_1_X = 0
-DISPLAY_HDMI_1_Y = 0
-DISPLAY_HDMI_2_X = 1920  # Potrebbe richiedere aggiustamenti
-DISPLAY_HDMI_2_Y = 0
-
 # --- Funzioni ---
 def find_usb_drive():
     """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
@@ -40,13 +35,11 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_ffplay(video_path, x, y):
+def play_video_ffplay(video_path):
     command = [
         "ffplay",
         "-fs",
         "-noborder",
-        "-x", str(x),  # Changed to -x
-        "-y", str(y),  # Changed to -y
         video_path
     ]
     process = subprocess.Popen(command)
@@ -73,9 +66,9 @@ if __name__ == "__main__":
 
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con ffplay (fullscreen)...")
-            video_process_1 = play_video_ffplay(video1_path, DISPLAY_HDMI_1_X, DISPLAY_HDMI_1_Y)
+            video_process_1 = play_video_ffplay(video1_path)
             time.sleep(0.1)
-            video_process_2 = play_video_ffplay(video2_path, DISPLAY_HDMI_2_X, DISPLAY_HDMI_2_Y)
+            video_process_2 = play_video_ffplay(video2_path)
 
             print("Avvio riproduzione audio con ffplay...")
             audio_process = play_audio_ffplay(audio_path)
