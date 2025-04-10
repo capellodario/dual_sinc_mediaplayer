@@ -4,13 +4,14 @@ import os
 import glob
 import re  # Assicurati che questo import sia presente
 
+
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
-MOUNT_POINT_PREFIX = "/media/MuchoMas!/"  # Default mount point per le USB in Raspberry Pi OS
+MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
 
 DISPLAY_HDMI_1_X = 0
 DISPLAY_HDMI_1_Y = 0
-DISPLAY_HDMI_2_X = 1920  # Regola in base alla larghezza del tuo schermo
+DISPLAY_HDMI_2_X = 1920  # Potrebbe richiedere aggiustamenti in base alla risoluzione
 DISPLAY_HDMI_2_Y = 0
 
 # --- Funzioni ---
@@ -41,16 +42,13 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_ffplay(video_path, x, y, width, height):
+def play_video_ffplay(video_path, x, y):
     command = [
         "ffplay",
         "-fs",
         "-noborder",
         "-window_x", str(x),
         "-window_y", str(y),
-        "-window_width", str(width),
-        "-window_height", str(height),
-        "-loop", "0",
         video_path
     ]
     process = subprocess.Popen(command)
@@ -66,22 +64,6 @@ def play_audio_ffplay(audio_path):
     process = subprocess.Popen(command)
     return process
 
-def get_display_resolution(display_id):
-    try:
-        output = subprocess.check_output(["xrandr", "--listmonitors"]).decode("utf-8")
-        for line in output.splitlines():
-            if f"Monitor {display_id}:" in line:
-                resolution_match = re.search(r"(\d+)x(\d+)\+", line)
-                if resolution_match:
-                    return int(resolution_match.group(1)), int(resolution_match.group(2))
-        return None
-    except FileNotFoundError:
-        print("Errore: xrandr non trovato. Assicurati che sia installato.")
-        return None
-    except Exception as e:
-        print(f"Si è verificato un errore durante l'ottenimento della risoluzione: {e}")
-        return None
-
 if __name__ == "__main__":
     time.sleep(10)  # Aspetta 10 secondi all'avvio (regola se necessario)
     print("Avvio ricerca unità USB...")
@@ -92,23 +74,10 @@ if __name__ == "__main__":
         video1_path, video2_path, audio_path = find_media_files(usb_path)
 
         if video1_path and video2_path and audio_path:
-            print("File multimediali trovati. Inizio riproduzione.")
-
-            # Ottieni le risoluzioni degli schermi
-            resolution1 = get_display_resolution(0)
-            resolution2 = get_display_resolution(1)
-
-            if not resolution1 or not resolution2:
-                print("Errore: Impossibile ottenere la risoluzione di uno o entrambi i monitor.")
-                exit(1)
-
-            width1, height1 = resolution1
-            width2, height2 = resolution2
-
-            print("Avvio riproduzione video con ffplay...")
-            video_process_1 = play_video_ffplay(video1_path, DISPLAY_HDMI_1_X, DISPLAY_HDMI_1_Y, width1, height1)
+            print("Avvio riproduzione video con ffplay (fullscreen)...")
+            video_process_1 = play_video_ffplay(video1_path, DISPLAY_HDMI_1_X, DISPLAY_HDMI_1_Y)
             time.sleep(0.1)
-            video_process_2 = play_video_ffplay(video2_path, DISPLAY_HDMI_2_X, DISPLAY_HDMI_2_Y, width2, height2)
+            video_process_2 = play_video_ffplay(video2_path, DISPLAY_HDMI_2_X, DISPLAY_HDMI_2_Y)
 
             print("Avvio riproduzione audio con ffplay...")
             audio_process = play_audio_ffplay(audio_path)
