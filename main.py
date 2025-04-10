@@ -6,7 +6,7 @@ import re  # Assicurati che questo import sia presente
 
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
-MOUNT_POINT_PREFIX = "/media/pi/"  # Default mount point per le USB in Raspberry Pi OS
+MOUNT_POINT_PREFIX = "/media/MuchoMas!/"  # Default mount point per le USB in Raspberry Pi OS
 
 DISPLAY_HDMI_1_X = 0
 DISPLAY_HDMI_1_Y = 0
