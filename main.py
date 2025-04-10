@@ -2,34 +2,44 @@ import subprocess
 import time
 import os
 import glob
-import shutil  # For copying files (optional, see explanation)
+import re  # Assicurati che questo import sia presente
 
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
-MOUNT_POINT_PREFIX = "/media/pi/"  # Default mount point for USB drives in Raspberry Pi OS
+MOUNT_POINT_PREFIX = "/media/pi/"  # Default mount point per le USB in Raspberry Pi OS
 
 DISPLAY_HDMI_1_X = 0
 DISPLAY_HDMI_1_Y = 0
-DISPLAY_HDMI_2_X = 1920  # Adjust based on your screen width
+DISPLAY_HDMI_2_X = 1920  # Regola in base alla larghezza del tuo schermo
 DISPLAY_HDMI_2_Y = 0
 
 # --- Funzioni ---
 def find_usb_drive():
     """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
+    print(f"Ricerca unità USB in: {MOUNT_POINT_PREFIX}*")
     mounted_drives = glob.glob(f"{MOUNT_POINT_PREFIX}*")
+    print(f"Unità trovate: {mounted_drives}")
     if mounted_drives:
         return mounted_drives[0]
     return None
 
 def find_media_files(usb_path):
     """Cerca i file video e audio specifici nell'unità USB."""
+    print(f"Ricerca file multimediali in: {usb_path}")
     video1_path = os.path.join(usb_path, TARGET_FILES[0])
     video2_path = os.path.join(usb_path, TARGET_FILES[1])
     audio_path = os.path.join(usb_path, TARGET_FILES[2])
 
+    print(f"Percorso video 1 cercato: {video1_path}")
+    print(f"Percorso video 2 cercato: {video2_path}")
+    print(f"Percorso audio cercato: {audio_path}")
+
     if os.path.exists(video1_path) and os.path.exists(video2_path) and os.path.exists(audio_path):
+        print("File multimediali trovati.")
         return video1_path, video2_path, audio_path
-    return None, None, None
+    else:
+        print("File multimediali NON trovati.")
+        return None, None, None
 
 def play_video_ffplay(video_path, x, y, width, height):
     command = [
@@ -73,9 +83,8 @@ def get_display_resolution(display_id):
         return None
 
 if __name__ == "__main__":
-    import re
-
-    print("Ricerca unità USB...")
+    time.sleep(10)  # Aspetta 10 secondi all'avvio (regola se necessario)
+    print("Avvio ricerca unità USB...")
     usb_path = find_usb_drive()
 
     if usb_path:
@@ -83,7 +92,7 @@ if __name__ == "__main__":
         video1_path, video2_path, audio_path = find_media_files(usb_path)
 
         if video1_path and video2_path and audio_path:
-            print("File multimediali trovati.")
+            print("File multimediali trovati. Inizio riproduzione.")
 
             # Ottieni le risoluzioni degli schermi
             resolution1 = get_display_resolution(0)
@@ -121,4 +130,4 @@ if __name__ == "__main__":
         else:
             print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nell'unità USB.")
     else:
-        print("Nessuna unità USB trovata.")
+        print("Nessuna unità USB trovata.")g
