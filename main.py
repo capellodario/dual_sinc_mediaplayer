@@ -2,8 +2,6 @@ import subprocess
 import time
 import os
 import glob
-import re  # Assicurati che questo import sia presente
-
 
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
@@ -11,7 +9,7 @@ MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
 
 DISPLAY_HDMI_1_X = 0
 DISPLAY_HDMI_1_Y = 0
-DISPLAY_HDMI_2_X = 1920  # Potrebbe richiedere aggiustamenti in base alla risoluzione
+DISPLAY_HDMI_2_X = 1920  # Potrebbe richiedere aggiustamenti
 DISPLAY_HDMI_2_Y = 0
 
 # --- Funzioni ---
@@ -47,8 +45,8 @@ def play_video_ffplay(video_path, x, y):
         "ffplay",
         "-fs",
         "-noborder",
-        "-window_x", str(x),
-        "-window_y", str(y),
+        "-x", str(x),  # Changed to -x
+        "-y", str(y),  # Changed to -y
         video_path
     ]
     process = subprocess.Popen(command)
@@ -65,7 +63,7 @@ def play_audio_ffplay(audio_path):
     return process
 
 if __name__ == "__main__":
-    time.sleep(10)  # Aspetta 10 secondi all'avvio (regola se necessario)
+    time.sleep(10)
     print("Avvio ricerca unità USB...")
     usb_path = find_usb_drive()
 
