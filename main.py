@@ -35,20 +35,18 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_ffplay(video_path, hdmi_output):
-    os.environ["DISPLAY"] = f":{hdmi_output}"
+def play_video_ffplay(video_path, display_number):
+    os.environ["WAYLAND_DISPLAY"] = f"XWAYLAND{display_number}"
     command = [
         "ffplay",
-        "-fs",
+        "-fs",                    # fullscreen
         "-noborder",
-        "-loop", "0",
-        "-sync", "ext",
-        "-framedrop",
-        "-hwaccel", "drm",
-        "-vf", "format=yuv420p",
+        "-loop", "0",            # loop infinito
+        "-sync", "ext",          # sincronizzazione esterna
+        "-framedrop",            # permette il drop dei frame
         video_path
     ]
-    process = subprocess.Popen(command)
+    process = subprocess.Popen(command, env={**os.environ, "WAYLAND_DISPLAY": f"XWAYLAND{display_number}"})
     return process
 
 def play_audio_ffplay(audio_path):
@@ -72,9 +70,9 @@ if __name__ == "__main__":
 
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con ffplay (fullscreen)...")
-            video_process_1 = play_video_ffplay(video1_path, "0")  # HDMI-0
+            video_process_1 = play_video_ffplay(video1_path, "0")  # XWAYLAND0
             time.sleep(0.5)
-            video_process_2 = play_video_ffplay(video2_path, "1")  # HDMI-1
+            video_process_2 = play_video_ffplay(video2_path, "1")  # XWAYLAND1
 
             print("Avvio riproduzione audio con ffplay...")
             audio_process = play_audio_ffplay(audio_path)
