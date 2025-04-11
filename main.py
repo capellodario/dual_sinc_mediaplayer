@@ -46,7 +46,7 @@ def play_video_ffplay(video_path, display_number):
         "-fs",                    # fullscreen
         "-noborder",
         "-loop", "0",            # loop infinito
-        "-sync", "external",      # sincronizzazione esterna
+        "-sync", "ext",          # "ext" invece di "external"
         "-framedrop",            # permette il drop dei frame
         "-left", str(1920 * int(display_number)),
         "-top", "0",
@@ -67,7 +67,7 @@ def play_audio_ffplay(audio_path):
         "ffplay",
         "-nodisp",
         "-loop", "0",           # loop infinito
-        "-sync", "external",    # sincronizzazione esterna
+        "-sync", "ext",         # "ext" invece di "external"
         audio_path
     ]
     process = subprocess.Popen(command)
