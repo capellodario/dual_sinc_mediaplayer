@@ -35,33 +35,35 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_ffplay(video_path, display_number):
+def play_video_mpv(video_path, display_number):
     display_env = {
         **os.environ,
         "DISPLAY": f":{display_number}"
     }
     
     command = [
-        "ffplay",
-        "-fs",                    # fullscreen
-        "-noborder",
-        "-loop", "0",            # loop infinito
-        "-sync", "ext",          # sincronizzazione
-        "-framedrop",            # permette il drop dei frame
-        "-left", str(3840 * int(display_number)),  # posizione per 4K
-        "-top", "0",
+        "mpv",
+        "--fullscreen=yes",
+        "--loop-file=inf",
+        "--no-border",
+        "--geometry={}+0".format(3840 * int(display_number)),
+        "--hwdec=auto",          # usa accelerazione hardware automatica
+        "--profile=low-latency",
+        "--no-audio",            # disabilita l'audio per i video
+        "--fps=30",              # limita a 30fps per migliori performance
+        "--cache=yes",
+        "--cache-secs=10",       # cache di 10 secondi
         video_path
     ]
     
     process = subprocess.Popen(command, env=display_env)
     return process
 
-def play_audio_ffplay(audio_path):
+def play_audio_mpv(audio_path):
     command = [
-        "ffplay",
-        "-nodisp",
-        "-loop", "0",           # loop infinito
-        "-sync", "ext",         # sincronizzazione
+        "mpv",
+        "--no-video",
+        "--loop-file=inf",
         audio_path
     ]
     process = subprocess.Popen(command)
@@ -77,13 +79,13 @@ if __name__ == "__main__":
         video1_path, video2_path, audio_path = find_media_files(usb_path)
 
         if video1_path and video2_path and audio_path:
-            print("Avvio riproduzione video con ffplay (fullscreen)...")
-            video_process_1 = play_video_ffplay(video1_path, "0")
-            time.sleep(0.5)
-            video_process_2 = play_video_ffplay(video2_path, "1")
+            print("Avvio riproduzione video con mpv (fullscreen)...")
+            video_process_1 = play_video_mpv(video1_path, "0")
+            time.sleep(1)  # aumentato il delay per migliore sincronizzazione
+            video_process_2 = play_video_mpv(video2_path, "1")
 
-            print("Avvio riproduzione audio con ffplay...")
-            audio_process = play_audio_ffplay(audio_path)
+            print("Avvio riproduzione audio...")
+            audio_process = play_audio_mpv(audio_path)
 
             try:
                 video_process_1.wait()
