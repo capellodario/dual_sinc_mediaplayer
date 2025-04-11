@@ -36,7 +36,12 @@ def find_media_files(usb_path):
         return None, None, None
 
 def play_video_ffplay(video_path, display_number):
-    os.environ["WAYLAND_DISPLAY"] = f"XWAYLAND{display_number}"
+    # Imposta la variabile DISPLAY invece di WAYLAND_DISPLAY
+    display_env = {
+        **os.environ,
+        "DISPLAY": f":{display_number}"
+    }
+    
     command = [
         "ffplay",
         "-fs",                    # fullscreen
@@ -44,9 +49,12 @@ def play_video_ffplay(video_path, display_number):
         "-loop", "0",            # loop infinito
         "-sync", "ext",          # sincronizzazione esterna
         "-framedrop",            # permette il drop dei frame
+        "-left", str(1920 * int(display_number)),  # posizione orizzontale basata sul display
+        "-top", "0",             # posizione verticale
         video_path
     ]
-    process = subprocess.Popen(command, env={**os.environ, "WAYLAND_DISPLAY": f"XWAYLAND{display_number}"})
+    
+    process = subprocess.Popen(command, env=display_env)
     return process
 
 def play_audio_ffplay(audio_path):
@@ -70,9 +78,9 @@ if __name__ == "__main__":
 
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con ffplay (fullscreen)...")
-            video_process_1 = play_video_ffplay(video1_path, "0")  # XWAYLAND0
+            video_process_1 = play_video_ffplay(video1_path, "0")
             time.sleep(0.5)
-            video_process_2 = play_video_ffplay(video2_path, "1")  # XWAYLAND1
+            video_process_2 = play_video_ffplay(video2_path, "1")
 
             print("Avvio riproduzione audio con ffplay...")
             audio_process = play_audio_ffplay(audio_path)
