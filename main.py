@@ -36,7 +36,6 @@ def find_media_files(usb_path):
         return None, None, None
 
 def play_video_ffplay(video_path, display_number):
-    # Imposta la variabile DISPLAY invece di WAYLAND_DISPLAY
     display_env = {
         **os.environ,
         "DISPLAY": f":{display_number}"
@@ -47,10 +46,16 @@ def play_video_ffplay(video_path, display_number):
         "-fs",                    # fullscreen
         "-noborder",
         "-loop", "0",            # loop infinito
-        "-sync", "ext",          # sincronizzazione esterna
+        "-sync", "external",      # sincronizzazione esterna
         "-framedrop",            # permette il drop dei frame
-        "-left", str(1920 * int(display_number)),  # posizione orizzontale basata sul display
-        "-top", "0",             # posizione verticale
+        "-left", str(1920 * int(display_number)),
+        "-top", "0",
+        "-hwaccel", "drm",       # accelerazione hardware
+        "-threads", "4",         # usa 4 thread per la decodifica
+        "-vf", "format=yuv420p", # formato video ottimizzato
+        "-infbuf",              # buffer infinito
+        "-bufsize", "8192k",    # dimensione buffer
+        "-fflags", "nobuffer",  # disabilita il buffering
         video_path
     ]
     
@@ -61,7 +66,8 @@ def play_audio_ffplay(audio_path):
     command = [
         "ffplay",
         "-nodisp",
-        "-autoexit",
+        "-loop", "0",           # loop infinito
+        "-sync", "external",    # sincronizzazione esterna
         audio_path
     ]
     process = subprocess.Popen(command)
