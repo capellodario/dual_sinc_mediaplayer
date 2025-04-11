@@ -41,18 +41,25 @@ def play_video_mpv(video_path, display_number):
         "DISPLAY": f":{display_number}"
     }
     
+    # Calcola la posizione corretta per il display
+    x_pos = 3840 * int(display_number)
+    geometry = f"--geometry=+{x_pos}+0"
+    
     command = [
         "mpv",
         "--fullscreen=yes",
         "--loop-file=inf",
         "--no-border",
-        "--geometry={}+0".format(3840 * int(display_number)),
-        "--hwdec=auto",          # usa accelerazione hardware automatica
+        geometry,               # formato corretto della geometria
+        "--hwdec=auto",        # usa accelerazione hardware automatica
         "--profile=low-latency",
-        "--no-audio",            # disabilita l'audio per i video
-        "--fps=30",              # limita a 30fps per migliori performance
+        "--no-audio",          # disabilita l'audio per i video
+        "--fps=30",            # limita a 30fps per migliori performance
         "--cache=yes",
-        "--cache-secs=10",       # cache di 10 secondi
+        "--cache-secs=10",     # cache di 10 secondi
+        "--no-osc",            # disabilita i controlli su schermo
+        "--no-osd-bar",        # disabilita la barra OSD
+        "--osd-level=0",       # disabilita completamente OSD
         video_path
     ]
     
@@ -64,6 +71,7 @@ def play_audio_mpv(audio_path):
         "mpv",
         "--no-video",
         "--loop-file=inf",
+        "--no-terminal",       # disabilita output nel terminale
         audio_path
     ]
     process = subprocess.Popen(command)
@@ -81,7 +89,7 @@ if __name__ == "__main__":
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con mpv (fullscreen)...")
             video_process_1 = play_video_mpv(video1_path, "0")
-            time.sleep(1)  # aumentato il delay per migliore sincronizzazione
+            time.sleep(1)
             video_process_2 = play_video_mpv(video2_path, "1")
 
             print("Avvio riproduzione audio...")
