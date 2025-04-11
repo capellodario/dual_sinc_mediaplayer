@@ -41,25 +41,22 @@ def play_video_mpv(video_path, display_number):
         "DISPLAY": f":{display_number}"
     }
     
-    # Calcola la posizione corretta per il display
-    x_pos = 3840 * int(display_number)
-    geometry = f"--geometry=+{x_pos}+0"
-    
     command = [
         "mpv",
         "--fullscreen=yes",
         "--loop-file=inf",
         "--no-border",
-        geometry,               # formato corretto della geometria
-        "--hwdec=auto",        # usa accelerazione hardware automatica
+        "--screen={}".format(display_number),  # Specifica quale schermo usare
+        "--fs-screen={}".format(display_number),  # Forza il fullscreen sullo schermo specifico
+        "--hwdec=auto",
         "--profile=low-latency",
-        "--no-audio",          # disabilita l'audio per i video
-        "--fps=30",            # limita a 30fps per migliori performance
+        "--no-audio",
+        "--fps=30",
         "--cache=yes",
-        "--cache-secs=10",     # cache di 10 secondi
-        "--no-osc",            # disabilita i controlli su schermo
-        "--no-osd-bar",        # disabilita la barra OSD
-        "--osd-level=0",       # disabilita completamente OSD
+        "--cache-secs=10",
+        "--no-osc",
+        "--no-osd-bar",
+        "--osd-level=0",
         video_path
     ]
     
@@ -71,7 +68,7 @@ def play_audio_mpv(audio_path):
         "mpv",
         "--no-video",
         "--loop-file=inf",
-        "--no-terminal",       # disabilita output nel terminale
+        "--no-terminal",
         audio_path
     ]
     process = subprocess.Popen(command)
