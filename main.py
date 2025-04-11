@@ -36,20 +36,17 @@ def find_media_files(usb_path):
         return None, None, None
 
 def play_video_mpv(video_path, display_number):
-    # Usa WAYLAND_DISPLAY invece di DISPLAY
     display_env = {
         **os.environ,
-        "WAYLAND_DISPLAY": f"wayland-{display_number}",
-        "XDG_RUNTIME_DIR": "/run/user/1000"  # Tipico path per Wayland
+        "DISPLAY": f":0" # Mantieni :0, il server X gestisce gli schermi
     }
-    
+
     command = [
         "mpv",
         "--fullscreen=yes",
         "--loop-file=inf",
         "--no-border",
-        "--vo=gpu",             # Usa il renderer GPU
-        "--gpu-context=wayland",  # Forza il contesto Wayland
+        "--screen={}".format(display_number),  # Specifica quale schermo usare (0 o 1)
         "--hwdec=auto",
         "--profile=low-latency",
         "--no-audio",
@@ -61,7 +58,7 @@ def play_video_mpv(video_path, display_number):
         "--osd-level=0",
         video_path
     ]
-    
+
     process = subprocess.Popen(command, env=display_env)
     return process
 
@@ -87,9 +84,9 @@ if __name__ == "__main__":
 
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con mpv (fullscreen)...")
-            video_process_1 = play_video_mpv(video1_path, "0")
+            video_process_1 = play_video_mpv(video1_path, 0) # Usa 0 per il primo schermo
             time.sleep(1)
-            video_process_2 = play_video_mpv(video2_path, "1")
+            video_process_2 = play_video_mpv(video2_path, 1) # Usa 1 per il secondo schermo
 
             print("Avvio riproduzione audio...")
             audio_process = play_audio_mpv(audio_path)
