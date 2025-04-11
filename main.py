@@ -36,9 +36,11 @@ def find_media_files(usb_path):
         return None, None, None
 
 def play_video_mpv(video_path, display_number):
+    # Usa WAYLAND_DISPLAY invece di DISPLAY
     display_env = {
         **os.environ,
-        "DISPLAY": f":{display_number}"
+        "WAYLAND_DISPLAY": f"wayland-{display_number}",
+        "XDG_RUNTIME_DIR": "/run/user/1000"  # Tipico path per Wayland
     }
     
     command = [
@@ -46,8 +48,8 @@ def play_video_mpv(video_path, display_number):
         "--fullscreen=yes",
         "--loop-file=inf",
         "--no-border",
-        "--screen={}".format(display_number),  # Specifica quale schermo usare
-        "--fs-screen={}".format(display_number),  # Forza il fullscreen sullo schermo specifico
+        "--vo=gpu",             # Usa il renderer GPU
+        "--gpu-context=wayland",  # Forza il contesto Wayland
         "--hwdec=auto",
         "--profile=low-latency",
         "--no-audio",
