@@ -46,16 +46,10 @@ def play_video_ffplay(video_path, display_number):
         "-fs",                    # fullscreen
         "-noborder",
         "-loop", "0",            # loop infinito
-        "-sync", "ext",          # "ext" invece di "external"
+        "-sync", "ext",          # sincronizzazione
         "-framedrop",            # permette il drop dei frame
-        "-left", str(1920 * int(display_number)),
+        "-left", str(3840 * int(display_number)),  # posizione per 4K
         "-top", "0",
-        "-hwaccel", "drm",       # accelerazione hardware
-        "-threads", "4",         # usa 4 thread per la decodifica
-        "-vf", "format=yuv420p", # formato video ottimizzato
-        "-infbuf",              # buffer infinito
-        "-bufsize", "8192k",    # dimensione buffer
-        "-fflags", "nobuffer",  # disabilita il buffering
         video_path
     ]
     
@@ -67,7 +61,7 @@ def play_audio_ffplay(audio_path):
         "ffplay",
         "-nodisp",
         "-loop", "0",           # loop infinito
-        "-sync", "ext",         # "ext" invece di "external"
+        "-sync", "ext",         # sincronizzazione
         audio_path
     ]
     process = subprocess.Popen(command)
