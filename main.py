@@ -10,10 +10,11 @@ MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
 LOCAL_VIDEO_DIR = "/home/MuchoMas!/videos"
 
 # --- Configurazione Schermi (Larghezza totale dello schermo esteso) ---
-DISPLAY1_WIDTH = 3840  # Assumendo 4K orizzontale
-DISPLAY1_HEIGHT = 2160
-DISPLAY2_WIDTH = 3840  # Assumendo 4K orizzontale
-DISPLAY2_HEIGHT = 2160
+DISPLAY1_WIDTH = 1024 # Assumendo 4K orizzontale
+DISPLAY1_HEIGHT = 1152
+DISPLAY2_WIDTH = 600 # Assumendo 4K orizzontale
+DISPLAY2_HEIGHT = 864
+
 TOTAL_WIDTH = DISPLAY1_WIDTH + DISPLAY2_WIDTH  # Larghezza totale dello schermo esteso (7680)
 TOTAL_HEIGHT = max(DISPLAY1_HEIGHT, DISPLAY2_HEIGHT) # Altezza 2160
 
