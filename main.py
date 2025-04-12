@@ -7,6 +7,17 @@ import glob
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
 
+# --- Configurazione Schermi (Modificare in base alla propria configurazione) ---
+DISPLAY1_WIDTH = 1024
+DISPLAY1_HEIGHT = 600
+DISPLAY1_OFFSET_X = 0
+DISPLAY1_OFFSET_Y = 0
+
+DISPLAY2_WIDTH = 1152
+DISPLAY2_HEIGHT = 864
+DISPLAY2_OFFSET_X = 1024
+DISPLAY2_OFFSET_Y = 0
+
 # --- Funzioni ---
 def find_usb_drive():
     """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
@@ -35,10 +46,10 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_mpv(video_path, display_number):
+def play_video_mpv(video_path, width, height, offset_x, offset_y):
     display_env = {
         **os.environ,
-        "DISPLAY": f":0" # Mantieni :0, il server X gestisce gli schermi
+        "DISPLAY": ":0"
     }
 
     command = [
@@ -46,7 +57,7 @@ def play_video_mpv(video_path, display_number):
         "--fullscreen=yes",
         "--loop-file=inf",
         "--no-border",
-        "--screen={}".format(display_number),  # Specifica quale schermo usare (0 o 1)
+        f"--geometry={width}x{height}+{offset_x}+{offset_y}",
         "--hwdec=auto",
         "--profile=low-latency",
         "--no-audio",
@@ -84,9 +95,23 @@ if __name__ == "__main__":
 
         if video1_path and video2_path and audio_path:
             print("Avvio riproduzione video con mpv (fullscreen)...")
-            video_process_1 = play_video_mpv(video1_path, 0) # Usa 0 per il primo schermo
+            # Riproduzione sul primo schermo
+            video_process_1 = play_video_mpv(
+                video1_path,
+                DISPLAY1_WIDTH,
+                DISPLAY1_HEIGHT,
+                DISPLAY1_OFFSET_X,
+                DISPLAY1_OFFSET_Y
+            )
             time.sleep(1)
-            video_process_2 = play_video_mpv(video2_path, 1) # Usa 1 per il secondo schermo
+            # Riproduzione sul secondo schermo
+            video_process_2 = play_video_mpv(
+                video2_path,
+                DISPLAY2_WIDTH,
+                DISPLAY2_HEIGHT,
+                DISPLAY2_OFFSET_X,
+                DISPLAY2_OFFSET_Y
+            )
 
             print("Avvio riproduzione audio...")
             audio_process = play_audio_mpv(audio_path)
