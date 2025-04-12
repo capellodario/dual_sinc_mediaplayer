@@ -6,8 +6,8 @@ import glob
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
-DISPLAY1 = "HDMI-A-1"  # Probabile nome della prima uscita HDMI (da xrandr)
-DISPLAY2 = "HDMI-A-2"  # Probabile nome della seconda uscita HDMI (da xrandr)
+DISPLAY1 = "XWAYLAND0"
+DISPLAY2 = "XWAYLAND1"
 
 def find_usb_drive():
     """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
@@ -91,5 +91,3 @@ if __name__ == "__main__":
             print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nell'unità USB.")
     else:
         print("Nessuna unità USB trovata.")
-
-        
