@@ -5,20 +5,20 @@ import glob
 import shutil
 
 # --- Configurazione ---
-TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
+TARGET_FILES = ["1.mp4"]  # Solo il video unito
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
-LOCAL_VIDEO_DIR = "/home/MuchoMas!/videos"  # MODIFICA SE NECESSARIO
+LOCAL_VIDEO_DIR = "/home/MuchoMas!/videos"
 
-# --- Configurazione Schermi (Modificare in base alla propria configurazione) ---
-DISPLAY1_WIDTH = 1024
-DISPLAY1_HEIGHT = 600
-DISPLAY1_OFFSET_X = 0
-DISPLAY1_OFFSET_Y = 0
+# --- Configurazione Schermi (Larghezza totale dello schermo esteso) ---
+DISPLAY1_WIDTH = 3840  # Assumendo 4K orizzontale
+DISPLAY1_HEIGHT = 2160
+DISPLAY2_WIDTH = 3840  # Assumendo 4K orizzontale
+DISPLAY2_HEIGHT = 2160
+TOTAL_WIDTH = DISPLAY1_WIDTH + DISPLAY2_WIDTH  # Larghezza totale dello schermo esteso (7680)
+TOTAL_HEIGHT = max(DISPLAY1_HEIGHT, DISPLAY2_HEIGHT) # Altezza 2160
 
-DISPLAY2_WIDTH = 1152
-DISPLAY2_HEIGHT = 864
-DISPLAY2_OFFSET_X = 1024
-DISPLAY2_OFFSET_Y = 0
+DISPLAY_OFFSET_X = 0
+DISPLAY_OFFSET_Y = 0
 
 # --- Funzioni ---
 def find_usb_drive():
@@ -64,22 +64,18 @@ def copy_files_from_usb(usb_path, local_dir, target_files):
     return copied_files
 
 def find_local_media_files(local_dir, target_files):
-    """Cerca i file video e audio specifici nella directory locale."""
+    """Cerca i file video specifici nella directory locale."""
     print(f"Ricerca file multimediali in: {local_dir}")
-    video1_path = os.path.join(local_dir, target_files[0])
-    video2_path = os.path.join(local_dir, target_files[1])
-    audio_path = os.path.join(local_dir, target_files[2])
+    video_path = os.path.join(local_dir, target_files[0])
 
-    print(f"Percorso video 1 cercato: {video1_path}")
-    print(f"Percorso video 2 cercato: {video2_path}")
-    print(f"Percorso audio cercato: {audio_path}")
+    print(f"Percorso video cercato: {video_path}")
 
-    if os.path.exists(video1_path) and os.path.exists(video2_path) and os.path.exists(audio_path):
-        print("File multimediali locali trovati.")
-        return video1_path, video2_path, audio_path
+    if os.path.exists(video_path):
+        print("File video locale trovato.")
+        return video_path, None  # Restituiamo None per il file audio
     else:
-        print("File multimediali locali NON trovati.")
-        return None, None, None
+        print("File video locale NON trovato.")
+        return None, None
 
 def play_video_mpv(video_path, width, height, offset_x, offset_y):
     display_env = {
@@ -95,7 +91,6 @@ def play_video_mpv(video_path, width, height, offset_x, offset_y):
         f"--geometry={width}x{height}+{offset_x}+{offset_y}",
         "--hwdec=auto",
         "--profile=low-latency",
-        "--no-audio",
         "--fps=30",
         "--cache=yes",
         "--cache-secs=10",
@@ -108,17 +103,6 @@ def play_video_mpv(video_path, width, height, offset_x, offset_y):
     process = subprocess.Popen(command, env=display_env)
     return process
 
-def play_audio_mpv(audio_path):
-    command = [
-        "mpv",
-        "--no-video",
-        "--loop-file=inf",
-        "--no-terminal",
-        audio_path
-    ]
-    process = subprocess.Popen(command)
-    return process
-
 if __name__ == "__main__":
     time.sleep(10)
     print("Avvio gestione file dalla chiavetta USB...")
@@ -126,85 +110,47 @@ if __name__ == "__main__":
 
     if usb_path:
         copy_files_from_usb(usb_path, LOCAL_VIDEO_DIR, TARGET_FILES)
-        video1_path, video2_path, audio_path = find_local_media_files(LOCAL_VIDEO_DIR, TARGET_FILES)
+        video_path, _ = find_local_media_files(LOCAL_VIDEO_DIR, TARGET_FILES)
 
-        if video1_path and video2_path and audio_path:
-            print("Avvio riproduzione video con mpv (fullscreen)...")
-            # Riproduzione sul primo schermo
-            video_process_1 = play_video_mpv(
-                video1_path,
-                DISPLAY1_WIDTH,
-                DISPLAY1_HEIGHT,
-                DISPLAY1_OFFSET_X,
-                DISPLAY1_OFFSET_Y
+        if video_path:
+            print("Avvio riproduzione video unito (fullscreen)...")
+            video_process = play_video_mpv(
+                video_path,
+                TOTAL_WIDTH,
+                TOTAL_HEIGHT,
+                DISPLAY_OFFSET_X,
+                DISPLAY_OFFSET_Y
             )
-            time.sleep(1)
-            # Riproduzione sul secondo schermo
-            video_process_2 = play_video_mpv(
-                video2_path,
-                DISPLAY2_WIDTH,
-                DISPLAY2_HEIGHT,
-                DISPLAY2_OFFSET_X,
-                DISPLAY2_OFFSET_Y
-            )
-
-            print("Avvio riproduzione audio...")
-            audio_process = play_audio_mpv(audio_path)
 
             try:
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
+                video_process.wait()
             except KeyboardInterrupt:
-                print("\nInterruzione manuale. Terminazione dei processi...")
-                video_process_1.terminate()
-                video_process_2.terminate()
-                audio_process.terminate()
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
-                print("Processi terminati.")
+                print("\nInterruzione manuale. Terminazione del processo video...")
+                video_process.terminate()
+                video_process.wait()
+                print("Processo video terminato.")
 
         else:
-            print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nella directory locale: {LOCAL_VIDEO_DIR}")
+            print(f"File video unito ({TARGET_FILES[0]}) non trovato nella directory locale: {LOCAL_VIDEO_DIR}")
     else:
         print("Nessuna unità USB trovata. Si tenterà la riproduzione dalla directory locale.")
-        video1_path, video2_path, audio_path = find_local_media_files(LOCAL_VIDEO_DIR, TARGET_FILES)
-        if video1_path and video2_path and audio_path:
-            print("Avvio riproduzione video con mpv (fullscreen)...")
-            # Riproduzione sul primo schermo
-            video_process_1 = play_video_mpv(
-                video1_path,
-                DISPLAY1_WIDTH,
-                DISPLAY1_HEIGHT,
-                DISPLAY1_OFFSET_X,
-                DISPLAY1_OFFSET_Y
+        video_path, _ = find_local_media_files(LOCAL_VIDEO_DIR, TARGET_FILES)
+        if video_path:
+            print("Avvio riproduzione video unito (fullscreen)...")
+            video_process = play_video_mpv(
+                video_path,
+                TOTAL_WIDTH,
+                TOTAL_HEIGHT,
+                DISPLAY_OFFSET_X,
+                DISPLAY_OFFSET_Y
             )
-            time.sleep(1)
-            # Riproduzione sul secondo schermo
-            video_process_2 = play_video_mpv(
-                video2_path,
-                DISPLAY2_WIDTH,
-                DISPLAY2_HEIGHT,
-                DISPLAY2_OFFSET_X,
-                DISPLAY2_OFFSET_Y
-            )
-
-            print("Avvio riproduzione audio...")
-            audio_process = play_audio_mpv(audio_path)
 
             try:
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
+                video_process.wait()
             except KeyboardInterrupt:
-                print("\nInterruzione manuale. Terminazione dei processi...")
-                video_process_1.terminate()
-                video_process_2.terminate()
-                audio_process.terminate()
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
-                print("Processi terminati.")
+                print("\nInterruzione manuale. Terminazione del processo video...")
+                video_process.terminate()
+                video_process.wait()
+                print("Processo video terminato.")
         else:
-            print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nella directory locale: {LOCAL_VIDEO_DIR}")
+            print(f"File video unito ({TARGET_FILES[0]}) non trovato nella directory locale: {LOCAL_VIDEO_DIR}")
