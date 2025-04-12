@@ -6,8 +6,8 @@ import glob
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
-DISPLAY1 = "XWAYLAND0"
-DISPLAY2 = "XWAYLAND1"
+DISPLAY1_SCREEN = 0
+DISPLAY2_SCREEN = 1
 
 def find_usb_drive():
     """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
@@ -36,15 +36,14 @@ def find_media_files(usb_path):
         print("File multimediali NON trovati.")
         return None, None, None
 
-def play_video_vlc(video_path, display_name):
-    """Riproduce il video a schermo intero sul display specificato usando VLC."""
+def play_video_mpv(video_path, screen_number):
+    """Riproduce il video a schermo intero sul display specificato usando MPV."""
     command = [
-        "cvlc",
+        "mpv",
         "--fullscreen",
-        f"--vout-display={display_name}",
+        f"--screen={screen_number}",
         "--loop",
-        video_path,
-        "vlc://quit"  # Per far chiudere VLC al termine (potrebbe non funzionare in loop)
+        video_path
     ]
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
@@ -65,10 +64,10 @@ if __name__ == "__main__":
         video1_path, video2_path, audio_path = find_media_files(usb_path)
 
         if video1_path and video2_path and audio_path:
-            print("Avvio riproduzione video con VLC...")
-            video_process_1 = play_video_vlc(video1_path, DISPLAY1)
-            time.sleep(0.5)  # Breve attesa per l'avvio del primo video
-            video_process_2 = play_video_vlc(video2_path, DISPLAY2)
+            print("Avvio riproduzione video con MPV...")
+            video_process_1 = play_video_mpv(video1_path, DISPLAY1_SCREEN)
+            time.sleep(0.5)
+            video_process_2 = play_video_mpv(video2_path, DISPLAY2_SCREEN)
 
             print("Avvio riproduzione audio con aplay...")
             audio_process = play_audio_aplay(audio_path)
