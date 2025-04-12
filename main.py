@@ -6,8 +6,8 @@ import shutil
 
 # --- Configurazione ---
 TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
-LOCAL_VIDEO_DIR = "/home/pi/videos"  # Cambia con la directory desiderata sul Raspberry Pi
 MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
+LOCAL_VIDEO_DIR = "/home/MuchoMas!/videos"  # MODIFICA SE NECESSARIO
 
 # --- Configurazione Schermi (Modificare in base alla propria configurazione) ---
 DISPLAY1_WIDTH = 1024
