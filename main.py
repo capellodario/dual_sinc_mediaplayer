@@ -5,7 +5,7 @@ import glob
 import socket
 
 # --- Configurazione (Master) ---
-MOUNT_POINT = "/media/pi/"
+MOUNT_POINT = "/media/muchomas/"
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
