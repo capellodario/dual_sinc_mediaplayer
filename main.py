@@ -2,91 +2,89 @@ import subprocess
 import time
 import os
 import glob
+import socket
 
-# --- Configurazione ---
-TARGET_FILES = ["1.mp4", "2.mp4", "3.mp4"]
-MOUNT_POINT_PREFIX = "/media/MuchoMas!/"
-DISPLAY1_SCREEN = 0
-DISPLAY2_SCREEN = 1
+# --- Configurazione (Master) ---
+MOUNT_POINT = "/media/pi/"
+MASTER_VIDEO_FILE = "master_video.mp4"
+AUDIO_FILE = "audio.wav"
+SLAVE_IP_ADDRESS = "192.168.1.101"
+SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
+DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
 
-def find_usb_drive():
-    """Cerca le unità USB montate e restituisce il percorso alla prima trovata."""
-    print(f"Ricerca unità USB in: {MOUNT_POINT_PREFIX}*")
-    mounted_drives = glob.glob(f"{MOUNT_POINT_PREFIX}*")
-    print(f"Unità trovate: {mounted_drives}")
-    if mounted_drives:
-        return mounted_drives[0]
+def find_media_path(base_path, filename):
+    """Cerca il file specificato in tutte le sottocartelle del percorso base."""
+    for root, _, files in os.walk(base_path):
+        if filename in files:
+            return os.path.join(root, filename)
     return None
 
-def find_media_files(usb_path):
-    """Cerca i file video e audio specifici nell'unità USB."""
-    print(f"Ricerca file multimediali in: {usb_path}")
-    video1_path = os.path.join(usb_path, TARGET_FILES[0])
-    video2_path = os.path.join(usb_path, TARGET_FILES[1])
-    audio_path = os.path.join(usb_path, TARGET_FILES[2])
+def check_slave_ready():
+    """Tenta di connettersi allo Slave per verificare se è pronto."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(5)  # Timeout di 5 secondi per la connessione
+            s.connect((SLAVE_IP_ADDRESS, SLAVE_PORT))
+            return True
+    except (socket.error, socket.timeout):
+        return False
 
-    print(f"Percorso video 1 cercato: {video1_path}")
-    print(f"Percorso video 2 cercato: {video2_path}")
-    print(f"Percorso audio cercato: {audio_path}")
-
-    if os.path.exists(video1_path) and os.path.exists(video2_path) and os.path.exists(audio_path):
-        print("File multimediali trovati.")
-        return video1_path, video2_path, audio_path
-    else:
-        print("File multimediali NON trovati.")
-        return None, None, None
-
-def play_video_mpv(video_path, screen_number):
-    """Riproduce il video a schermo intero sul display specificato usando MPV."""
-    command = [
-        "mpv",
-        "--fullscreen",
-        f"--screen={screen_number}",
+def play_video_master(video_path, audio_path):
+    """Riproduce il video e l'audio in loop sul Master."""
+    vlc_command = [
+        "cvlc",
         "--loop",
-        video_path
+        "--fullscreen",
+        video_path,
+        "--audio-file",
+        audio_path,
+        "vlc://quit"
     ]
-    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    return process
+    return subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
-def play_audio_aplay(audio_path):
-    """Riproduce l'audio usando aplay."""
-    command = ["aplay", audio_path]
-    process = subprocess.Popen(command)
-    return process
+def trigger_slave():
+    """Invia un comando SSH per avviare la riproduzione sul Slave."""
+    ssh_command = [
+        "ssh",
+        "-o", "StrictHostKeyChecking=no",
+        "pi@" + SLAVE_IP_ADDRESS,
+        f"bash /home/pi/start_slave_video.sh"  # Assumendo che lo script sia in /home/pi
+    ]
+    subprocess.run(ssh_command, check=True)
 
 if __name__ == "__main__":
-    time.sleep(10)
-    print("Avvio ricerca unità USB...")
-    usb_path = find_usb_drive()
+    time.sleep(10)  # Attendi il montaggio dell'USB
+
+    usb_path = glob.glob(f"{MOUNT_POINT}*")[0] if glob.glob(f"{MOUNT_POINT}*") else None
 
     if usb_path:
-        print(f"Unità USB trovata in: {usb_path}")
-        video1_path, video2_path, audio_path = find_media_files(usb_path)
+        master_video_path = find_media_path(usb_path, MASTER_VIDEO_FILE)
+        audio_path = find_media_path(usb_path, AUDIO_FILE)
 
-        if video1_path and video2_path and audio_path:
-            print("Avvio riproduzione video con MPV...")
-            video_process_1 = play_video_mpv(video1_path, DISPLAY1_SCREEN)
-            time.sleep(0.5)
-            video_process_2 = play_video_mpv(video2_path, DISPLAY2_SCREEN)
+        if master_video_path and audio_path:
+            if not DEBUG_MODE:
+                print("Attesa che lo Slave sia pronto...")
+                while not check_slave_ready():
+                    print("Slave non ancora pronto, riprovo tra 2 secondi...")
+                    time.sleep(2)
+                print("Slave pronto!")
 
-            print("Avvio riproduzione audio con aplay...")
-            audio_process = play_audio_aplay(audio_path)
-
+            print("Avvio video e audio sul Master...")
+            master_process = play_video_master(master_video_path, audio_path)
+            time.sleep(1)  # Piccolo ritardo per dare tempo al Master di avviarsi
+            print("Invio comando di avvio allo Slave...")
             try:
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
-            except KeyboardInterrupt:
-                print("\nInterruzione manuale. Terminazione dei processi...")
-                video_process_1.terminate()
-                video_process_2.terminate()
-                audio_process.terminate()
-                video_process_1.wait()
-                video_process_2.wait()
-                audio_process.wait()
-                print("Processi terminati.")
-
+                trigger_slave()
+                print("Comando inviato allo Slave.")
+                try:
+                    master_process.wait()  # Mantieni in esecuzione fino all'interruzione
+                except KeyboardInterrupt:
+                    print("Interruzione, terminazione del Master...")
+                    master_process.terminate()
+                    master_process.wait()
+            except subprocess.CalledProcessError as e:
+                print(f"Errore nell'invio del comando allo Slave: {e}")
         else:
-            print(f"I file richiesti ({', '.join(TARGET_FILES)}) non sono stati trovati nell'unità USB.")
+            print("File video o audio per il Master non trovati.")
     else:
-        print("Nessuna unità USB trovata.")
+        print("Chiavetta USB non trovata sul Master.")
