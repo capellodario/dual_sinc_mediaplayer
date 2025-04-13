@@ -9,15 +9,15 @@ MOUNT_POINT = "/media/muchomas/"
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
-SEND_TO_SLAVE = False  # Imposta a False per disabilitare l'invio del comando allo Slave
+SEND_TO_SLAVE = True  # Imposta a False per disabilitare l'invio del comando allo Slave
 VLC_OUTPUT_MODULE = "wl_dmabuf"  # Usa il modulo Wayland che funziona
 
 def find_first_video(base_path):
-    """Cerca il primo file video trovato in tutte le sottocartelle del percorso base."""
+    """Cerca il primo file video trovato in tutte le sottocartelle del percorso base, escludendo i file macOS metadata."""
     for root, _, files in os.walk(base_path):
-        for file in sorted(files):
-            if file.lower().endswith(('.mp4', '.avi', '.mkv', '.mov')):
-                return os.path.join(root, file)
+        valid_video_files = sorted([f for f in files if f.lower().endswith(('.mp4', '.avi', '.mkv', '.mov')) and not f.startswith('._')])
+        if valid_video_files:
+            return os.path.join(root, valid_video_files[0])
     return None
 
 def check_slave_ready():
