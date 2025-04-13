@@ -41,7 +41,12 @@ def play_video_master(video_path):
             video_path,
             "vlc://quit"
         ]
-        return subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        print(f"[DEBUG MASTER] Comando VLC che verrà eseguito: {vlc_command}")
+        process = subprocess.Popen(vlc_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = process.communicate()
+        if stderr:
+            print(f"[DEBUG MASTER] Errore da VLC: {stderr.decode()}")
+        return process
     return None
 
 def trigger_slave():
@@ -52,7 +57,12 @@ def trigger_slave():
         "pi@" + SLAVE_IP_ADDRESS,
         f"bash /home/pi/start_slave_video.sh"  # Assumendo che lo script sia in /home/pi
     ]
-    subprocess.run(ssh_command, check=True)
+    print(f"[DEBUG MASTER] Comando SSH per lo Slave: {ssh_command}")
+    try:
+        subprocess.run(ssh_command, check=True)
+        print("[DEBUG MASTER] Comando SSH inviato con successo.")
+    except subprocess.CalledProcessError as e:
+        print(f"[DEBUG MASTER] Errore nell'invio del comando allo Slave: {e}")
 
 if __name__ == "__main__":
     time.sleep(10)  # Attendi il montaggio dell'USB
@@ -61,38 +71,41 @@ if __name__ == "__main__":
 
     if usb_path:
         master_video_path = find_first_video(usb_path)
+        print(f"[DEBUG MASTER] Percorso video trovato: {master_video_path}")
 
         if master_video_path:
             if not DEBUG_MODE:
-                print("Attesa che lo Slave sia pronto...")
+                print("[DEBUG MASTER] Attesa che lo Slave sia pronto...")
                 while not check_slave_ready():
-                    print("Slave non ancora pronto, riprovo tra 2 secondi...")
+                    print("[DEBUG MASTER] Slave non ancora pronto, riprovo tra 2 secondi...")
                     time.sleep(2)
-                print("Slave pronto!")
-
-            print(f"Avvio video sul Master: {master_video_path}")
-            master_process = play_video_master(master_video_path)
-            time.sleep(1)  # Piccolo ritardo per dare tempo al Master di avviarsi
-
-            if SEND_TO_SLAVE:
-                print("Invio comando di avvio allo Slave...")
-                try:
-                    trigger_slave()
-                    print("Comando inviato allo Slave.")
-                except subprocess.CalledProcessError as e:
-                    print(f"Errore nell'invio del comando allo Slave: {e}")
+                print("[DEBUG MASTER] Slave pronto!")
             else:
-                print("Invio comando allo Slave disabilitato.")
+                print("[DEBUG MASTER] Modalità DEBUG attiva: salto l'attesa dello Slave.")
 
-            try:
-                if master_process:
+            print("[DEBUG MASTER] Avvio video sul Master...")
+            master_process = play_video_master(master_video_path)
+
+            if master_process:
+                print("[DEBUG MASTER] Processo VLC Master avviato.")
+                time.sleep(1)  # Piccolo ritardo per dare tempo al Master di avviarsi
+
+                if SEND_TO_SLAVE:
+                    print("[DEBUG MASTER] Invio comando di avvio allo Slave...")
+                    trigger_slave()
+                else:
+                    print("[DEBUG MASTER] Invio comando allo Slave disabilitato.")
+
+                try:
                     master_process.wait()  # Mantieni in esecuzione fino all'interruzione
-            except KeyboardInterrupt:
-                print("Interruzione, terminazione del Master...")
-                if master_process:
+                    print("[DEBUG MASTER] Processo VLC Master terminato.")
+                except KeyboardInterrupt:
+                    print("[DEBUG MASTER] Interruzione, terminazione del Master...")
                     master_process.terminate()
                     master_process.wait()
+            else:
+                print("[DEBUG MASTER] Errore nell'avvio del processo VLC sul Master.")
         else:
-            print("Nessun file video trovato per il Master.")
+            print("[DEBUG MASTER] Nessun file video trovato per il Master.")
     else:
-        print("Chiavetta USB non trovata sul Master.")
+        print("[DEBUG MASTER] Chiavetta USB non trovata sul Master.")
