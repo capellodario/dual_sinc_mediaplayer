@@ -51,16 +51,17 @@ def send_start_command_to_slave():
 def play_video_master(video_path):
     """Riproduce il video in loop a schermo intero sul Master con ffmpeg."""
     if video_path:
-
         ffmpeg_command = [
             "ffmpeg",
             "-re",
             "-i", video_path,
-            "-vf", "format=pix_fmts=yuyv422",  # Prova yuyv422
+            "-vf", "format=pix_fmts=rgb565le",  # Usa il formato suggerito
             "-an",
             "-loop", "0",
             "-f", "fbdev", "/dev/fb0"
         ]
+
+        
         print(f"[DEBUG MASTER] Comando FFmpeg Master: {ffmpeg_command}")
         global master_process
         master_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
