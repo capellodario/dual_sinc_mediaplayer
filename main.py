@@ -15,7 +15,7 @@ def play_video_on_display(video_path, display_name):
         video_path
     ]
     print(f"Avvio '{video_path}' su display: {display_name}")
-    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(command)  # Rimossa la reindirizzazione dell'output
     return process
 
 if __name__ == "__main__":
