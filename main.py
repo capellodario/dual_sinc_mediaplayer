@@ -1,115 +1,43 @@
+import subprocess
 import time
 import os
-import glob
-import socket
-import signal
-import sys
-import subprocess
 
-# --- Configurazione (Master) ---
-MOUNT_POINT_MASTER = "/media/muchomas/" # Punto di mount della chiavetta USB del Master
-SLAVE_IP_ADDRESS = "192.168.1.101"
-SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
-DEBUG_MODE = True
-SEND_TO_SLAVE = False
-MASTER_VIDEO_PATH = None  # Variabile globale per il percorso del video Master
-master_process = None
+video1_path = "/media/muchomas/rasp_key/1.mp4"
+video2_path = "/media/muchomas/rasp_key/2.mp4"
 
-def find_first_video(base_path):
-    """Cerca il primo file video trovato."""
-    for root, _, files in os.walk(base_path):
-        valid_video_files = sorted([f for f in files if f.lower().endswith(('.mp4', '.avi', '.mkv', '.mov')) and not f.startswith('._')])
-        if valid_video_files:
-            return os.path.join(root, valid_video_files[0])
-    return None
-
-def check_slave_ready():
-    """Tenta di connettersi allo Slave per verificare se è in ascolto."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5)
-            s.connect((SLAVE_IP_ADDRESS, SLAVE_PORT))
-            print("[DEBUG MASTER] Slave trovato e pronto.")
-            return True
-    except (socket.error, socket.timeout):
-        print("[DEBUG MASTER] Impossibile connettersi allo Slave. Riprovo...")
-        return False
-
-def send_start_command_to_slave():
-    """Invia un comando al Slave per avviare la riproduzione."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5)
-            s.connect((SLAVE_IP_ADDRESS, SLAVE_PORT))
-            s.sendall(b"START\n") # Invia un semplice comando
-            print("[DEBUG MASTER] Comando 'START' inviato allo Slave.")
-            return True
-    except (socket.error, socket.timeout):
-        print("[DEBUG MASTER] Errore nell'invio del comando allo Slave.")
-        return False
-def play_video_master(video_path):
-    """Riproduce il video in loop a schermo intero sul Master."""
-    if video_path:
-        vlc_command = [
-            "cvlc",
-            "--vout=wl_dmabuf",
-            "--loop",
-            "--fullscreen",
-            "--no-osd",
-            "--codec=h264",
-            video_path,
-        ]
-        print(f"[DEBUG MASTER] Comando VLC Master: {vlc_command}")
-        global master_process
-        master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return master_process
-    return None
-
-def signal_handler(sig, frame):
-    """Gestisce il segnale di interruzione."""
-    print("\n[DEBUG MASTER] Ricevuto segnale di interruzione, terminazione...")
-    global master_process
-    if master_process:
-        master_process.terminate()
-        master_process.wait()
-    sys.exit(0)
+def play_video_on_screen(video_path, screen_number):
+    command = [
+        "mpv",
+        "--fullscreen",
+        f"--screen={screen_number}",
+        "--loop",
+        "--no-osc",
+        video_path
+    ]
+    print(f"Avvio su schermo {screen_number}: {command}")
+    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return process
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)
-    time.sleep(10) # Attendi montaggio USB Master
+    time.sleep(5) # Attendi l'avvio del desktop
 
-    usb_path_master = glob.glob(f"{MOUNT_POINT_MASTER}*")[0] if glob.glob(f"{MOUNT_POINT_MASTER}*") else None
+    # Prova con schermo 0 e schermo 1
+    process1 = play_video_on_screen(video1_path, 0)
+    process2 = play_video_on_screen(video2_path, 1)
 
-    if usb_path_master:
-        MASTER_VIDEO_PATH = find_first_video(usb_path_master)
-        print(f"[DEBUG MASTER] Video Master trovato: {MASTER_VIDEO_PATH}")
-    else:
-        print("[DEBUG MASTER] Chiavetta USB non trovata sul Master.")
-        sys.exit(1)
+    # Se non funziona, prova a cambiare i numeri (ad esempio, 1 e 2)
+    # process1 = play_video_on_screen(video1_path, 1)
+    # process2 = play_video_on_screen(video2_path, 2)
 
-    if not DEBUG_MODE and SEND_TO_SLAVE:
-        print("[DEBUG MASTER] Attendo che lo Slave sia pronto...")
-        while not check_slave_ready():
-            time.sleep(2)
-
-        print("[DEBUG MASTER] Invio comando di avvio allo Slave...")
-        send_start_command_to_slave()
-    elif SEND_TO_SLAVE:
-        print("[DEBUG MASTER] Modalità DEBUG attiva o invio disabilitato: non attendo/invio allo Slave.")
-
-    if MASTER_VIDEO_PATH:
-        print("[DEBUG MASTER] Avvio video sul Master...")
-        play_video_master(MASTER_VIDEO_PATH)
-        if master_process:
-            print("[DEBUG MASTER] Riproduzione Master avviata (Ctrl+C per terminare).")
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                pass
-        else:
-            print("[DEBUG MASTER] Errore nell'avvio del video sul Master.")
-    else:
-        print("[DEBUG MASTER] Nessun video trovato per il Master.")
-
-    print("[DEBUG MASTER] Script Master terminato.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("Terminazione dei processi...")
+        if process1:
+            process1.terminate()
+            process1.wait()
+        if process2:
+            process2.terminate()
+            process2.wait()
+        print("Processi terminati.")
