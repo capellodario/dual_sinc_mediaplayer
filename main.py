@@ -7,8 +7,8 @@ video2_path = "/media/muchomas/rasp_key/2.mp4"
 
 def play_video_on_screen(video_path, screen_number):
     command = [
-        "mpv",
-        "--fullscreen",
+        "/usr/bin/mpv",
+        "--fullscreen=yes",
         f"--screen={screen_number}",
         "--loop",
         "--no-osc",
@@ -19,15 +19,11 @@ def play_video_on_screen(video_path, screen_number):
     return process
 
 if __name__ == "__main__":
-    time.sleep(5) # Attendi l'avvio del desktop
+    time.sleep(5)
 
-    # Prova con schermo 0 e schermo 1
     process1 = play_video_on_screen(video1_path, 0)
+    time.sleep(0.5)  # Piccolo ritardo per tentare la sincronizzazione
     process2 = play_video_on_screen(video2_path, 1)
-
-    # Se non funziona, prova a cambiare i numeri (ad esempio, 1 e 2)
-    # process1 = play_video_on_screen(video1_path, 1)
-    # process2 = play_video_on_screen(video2_path, 2)
 
     try:
         while True:
