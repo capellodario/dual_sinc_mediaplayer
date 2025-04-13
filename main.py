@@ -3,6 +3,8 @@ import time
 import os
 import glob
 import socket
+import signal  # Importa il modulo signal
+import sys
 
 # --- Configurazione (Master) ---
 MOUNT_POINT = "/media/muchomas/"
@@ -11,6 +13,8 @@ SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
 SEND_TO_SLAVE = False  # Imposta a False per disabilitare l'invio del comando allo Slave
 VLC_OUTPUT_MODULE = "wl_dmabuf"  # Usa il modulo Wayland che funziona
+
+master_process = None  # Variabile globale per tenere traccia del processo VLC
 
 def find_first_video(base_path):
     """Cerca il primo file video trovato in tutte le sottocartelle del percorso base, escludendo i file macOS metadata."""
@@ -29,7 +33,7 @@ def check_slave_ready():
             return True
     except (socket.error, socket.timeout):
         return False
-    
+
 def play_video_master(video_path):
     """Riproduce il video in loop a schermo intero sul Master."""
     if video_path:
@@ -41,14 +45,11 @@ def play_video_master(video_path):
             "--no-osd",  # Disabilita l'OSD per nascondere la scritta
             "--codec=h264",    # Forza il codec software h264
             video_path,
-            "vlc://quit"
         ]
         print(f"[DEBUG MASTER] Comando VLC che verrà eseguito: {vlc_command}")
-        process = subprocess.Popen(vlc_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = process.communicate()
-        if stderr:
-            print(f"[DEBUG MASTER] Errore da VLC: {stderr.decode()}")
-        return process
+        global master_process
+        master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return master_process
     return None
 
 def trigger_slave():
@@ -66,7 +67,18 @@ def trigger_slave():
     except subprocess.CalledProcessError as e:
         print(f"[DEBUG MASTER] Errore nell'invio del comando allo Slave: {e}")
 
+def signal_handler(sig, frame):
+    """Gestisce il segnale di interruzione (Ctrl+C)."""
+    print("\n[DEBUG MASTER] Ricevuto segnale di interruzione, terminazione di VLC...")
+    global master_process
+    if master_process:
+        master_process.terminate()
+        master_process.wait()
+    sys.exit(0)
+
 if __name__ == "__main__":
+    signal.signal(signal.SIGINT, signal_handler)  # Registra il gestore per Ctrl+C
+
     time.sleep(10)  # Attendi il montaggio dell'USB
 
     usb_path = glob.glob(f"{MOUNT_POINT}*")[0] if glob.glob(f"{MOUNT_POINT}*") else None
@@ -86,11 +98,10 @@ if __name__ == "__main__":
                 print("[DEBUG MASTER] Modalità DEBUG attiva: salto l'attesa dello Slave.")
 
             print("[DEBUG MASTER] Avvio video sul Master...")
-            master_process = play_video_master(master_video_path)
+            play_video_master(master_video_path)
 
             if master_process:
-                print("[DEBUG MASTER] Processo VLC Master avviato.")
-                time.sleep(1)  # Piccolo ritardo per dare tempo al Master di avviarsi
+                print("[DEBUG MASTER] Processo VLC Master avviato (in loop, Ctrl+C per terminare).")
 
                 if SEND_TO_SLAVE:
                     print("[DEBUG MASTER] Invio comando di avvio allo Slave...")
@@ -99,12 +110,11 @@ if __name__ == "__main__":
                     print("[DEBUG MASTER] Invio comando allo Slave disabilitato.")
 
                 try:
-                    master_process.wait()  # Mantieni in esecuzione fino all'interruzione
-                    print("[DEBUG MASTER] Processo VLC Master terminato.")
+                    while True:
+                        time.sleep(1)  # Mantieni lo script in esecuzione per intercettare Ctrl+C
                 except KeyboardInterrupt:
-                    print("[DEBUG MASTER] Interruzione, terminazione del Master...")
-                    master_process.terminate()
-                    master_process.wait()
+                    # Questa eccezione verrà catturata dal signal handler
+                    pass
             else:
                 print("[DEBUG MASTER] Errore nell'avvio del processo VLC sul Master.")
         else:
