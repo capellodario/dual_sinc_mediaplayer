@@ -5,25 +5,25 @@ import os
 video1_path = "/media/muchomas/rasp_key/1.mp4"
 video2_path = "/media/muchomas/rasp_key/2.mp4"
 
-def play_video_on_screen(video_path, screen_number):
+def play_video_on_display(video_path, display_name):
     command = [
         "/usr/bin/mpv",
         "--fullscreen=yes",
-        f"--screen={screen_number}",
+        f"--display-device={display_name}",
         "--loop",
         "--no-osc",
         video_path
     ]
-    print(f"Avvio su schermo {screen_number}: {command}")
+    print(f"Avvio '{video_path}' su display: {display_name}")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
 if __name__ == "__main__":
     time.sleep(5)
 
-    process2 = play_video_on_screen(video2_path, 1)
-    time.sleep(0.5)
-    process1 = play_video_on_screen(video1_path, 0)
+    process1 = play_video_on_display(video1_path, "XWAYLAND0")
+    time.sleep(0.5)  # Piccolo ritardo per tentare la sincronizzazione
+    process2 = play_video_on_display(video2_path, "XWAYLAND1")
 
     try:
         while True:
