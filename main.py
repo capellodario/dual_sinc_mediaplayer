@@ -39,6 +39,7 @@ def play_video_master(video_path):
             "--loop",
             "--fullscreen",
             "--no-osd",  # Disabilita l'OSD per nascondere la scritta
+            "--codec=h264",    # Forza il codec software h264
             video_path,
             "vlc://quit"
         ]
@@ -49,7 +50,6 @@ def play_video_master(video_path):
             print(f"[DEBUG MASTER] Errore da VLC: {stderr.decode()}")
         return process
     return None
-
 
 def trigger_slave():
     """Invia un comando SSH per avviare la riproduzione sul Slave."""
