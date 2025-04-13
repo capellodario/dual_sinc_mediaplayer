@@ -3,21 +3,21 @@ import time
 import os
 import glob
 import socket
-import signal  # Importa il modulo signal
+import signal
 import sys
 
 # --- Configurazione (Master) ---
-MOUNT_POINT = "/media/muchomas/"
+MOUNT_POINT_MASTER = "/media/muchomas/" # Punto di mount della chiavetta USB del Master
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
-DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
-SEND_TO_SLAVE = False  # Imposta a False per disabilitare l'invio del comando allo Slave
-VLC_OUTPUT_MODULE = "wl_dmabuf"  # Usa il modulo Wayland che funziona
-
-master_process = None  # Variabile globale per tenere traccia del processo VLC
+DEBUG_MODE = True
+SEND_TO_SLAVE = False
+VLC_OUTPUT_MODULE = "wl_dmabuf"
+MASTER_VIDEO_PATH = None  # Variabile globale per il percorso del video Master
+master_process = None
 
 def find_first_video(base_path):
-    """Cerca il primo file video trovato in tutte le sottocartelle del percorso base, escludendo i file macOS metadata."""
+    """Cerca il primo file video trovato."""
     for root, _, files in os.walk(base_path):
         valid_video_files = sorted([f for f in files if f.lower().endswith(('.mp4', '.avi', '.mkv', '.mov')) and not f.startswith('._')])
         if valid_video_files:
@@ -25,13 +25,28 @@ def find_first_video(base_path):
     return None
 
 def check_slave_ready():
-    """Tenta di connettersi allo Slave per verificare se è pronto."""
+    """Tenta di connettersi allo Slave per verificare se è in ascolto."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5)  # Timeout di 5 secondi per la connessione
+            s.settimeout(5)
             s.connect((SLAVE_IP_ADDRESS, SLAVE_PORT))
+            print("[DEBUG MASTER] Slave trovato e pronto.")
             return True
     except (socket.error, socket.timeout):
+        print("[DEBUG MASTER] Impossibile connettersi allo Slave. Riprovo...")
+        return False
+
+def send_start_command_to_slave():
+    """Invia un comando al Slave per avviare la riproduzione."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(5)
+            s.connect((SLAVE_IP_ADDRESS, SLAVE_PORT))
+            s.sendall(b"START\n") # Invia un semplice comando
+            print("[DEBUG MASTER] Comando 'START' inviato allo Slave.")
+            return True
+    except (socket.error, socket.timeout):
+        print("[DEBUG MASTER] Errore nell'invio del comando allo Slave.")
         return False
 
 def play_video_master(video_path):
@@ -39,37 +54,22 @@ def play_video_master(video_path):
     if video_path:
         vlc_command = [
             "cvlc",
-            "--vout=wl_dmabuf",  # Forza l'output Wayland
+            "--vout=wl_dmabuf",
             "--loop",
             "--fullscreen",
-            "--no-osd",  # Disabilita l'OSD per nascondere la scritta
-            "--codec=h264",    # Forza il codec software h264
+            "--no-osd",
+            "--codec=h264",
             video_path,
         ]
-        print(f"[DEBUG MASTER] Comando VLC che verrà eseguito: {vlc_command}")
+        print(f"[DEBUG MASTER] Comando VLC Master: {vlc_command}")
         global master_process
         master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return master_process
     return None
 
-def trigger_slave():
-    """Invia un comando SSH per avviare la riproduzione sul Slave."""
-    ssh_command = [
-        "ssh",
-        "-o", "StrictHostKeyChecking=no",
-        "pi@" + SLAVE_IP_ADDRESS,
-        f"bash /home/pi/start_slave_video.sh"  # Assumendo che lo script sia in /home/pi
-    ]
-    print(f"[DEBUG MASTER] Comando SSH per lo Slave: {ssh_command}")
-    try:
-        subprocess.run(ssh_command, check=True)
-        print("[DEBUG MASTER] Comando SSH inviato con successo.")
-    except subprocess.CalledProcessError as e:
-        print(f"[DEBUG MASTER] Errore nell'invio del comando allo Slave: {e}")
-
 def signal_handler(sig, frame):
-    """Gestisce il segnale di interruzione (Ctrl+C)."""
-    print("\n[DEBUG MASTER] Ricevuto segnale di interruzione, terminazione di VLC...")
+    """Gestisce il segnale di interruzione."""
+    print("\n[DEBUG MASTER] Ricevuto segnale di interruzione, terminazione...")
     global master_process
     if master_process:
         master_process.terminate()
@@ -77,47 +77,41 @@ def signal_handler(sig, frame):
     sys.exit(0)
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, signal_handler)  # Registra il gestore per Ctrl+C
+    signal.signal(signal.SIGINT, signal_handler)
+    time.sleep(10) # Attendi montaggio USB Master
 
-    time.sleep(10)  # Attendi il montaggio dell'USB
+    usb_path_master = glob.glob(f"{MOUNT_POINT_MASTER}*")[0] if glob.glob(f"{MOUNT_POINT_MASTER}*") else None
 
-    usb_path = glob.glob(f"{MOUNT_POINT}*")[0] if glob.glob(f"{MOUNT_POINT}*") else None
-
-    if usb_path:
-        master_video_path = find_first_video(usb_path)
-        print(f"[DEBUG MASTER] Percorso video trovato: {master_video_path}")
-
-        if master_video_path:
-            if not DEBUG_MODE:
-                print("[DEBUG MASTER] Attesa che lo Slave sia pronto...")
-                while not check_slave_ready():
-                    print("[DEBUG MASTER] Slave non ancora pronto, riprovo tra 2 secondi...")
-                    time.sleep(2)
-                print("[DEBUG MASTER] Slave pronto!")
-            else:
-                print("[DEBUG MASTER] Modalità DEBUG attiva: salto l'attesa dello Slave.")
-
-            print("[DEBUG MASTER] Avvio video sul Master...")
-            play_video_master(master_video_path)
-
-            if master_process:
-                print("[DEBUG MASTER] Processo VLC Master avviato (in loop, Ctrl+C per terminare).")
-
-                if SEND_TO_SLAVE:
-                    print("[DEBUG MASTER] Invio comando di avvio allo Slave...")
-                    trigger_slave()
-                else:
-                    print("[DEBUG MASTER] Invio comando allo Slave disabilitato.")
-
-                try:
-                    while True:
-                        time.sleep(1)  # Mantieni lo script in esecuzione per intercettare Ctrl+C
-                except KeyboardInterrupt:
-                    # Questa eccezione verrà catturata dal signal handler
-                    pass
-            else:
-                print("[DEBUG MASTER] Errore nell'avvio del processo VLC sul Master.")
-        else:
-            print("[DEBUG MASTER] Nessun file video trovato per il Master.")
+    if usb_path_master:
+        MASTER_VIDEO_PATH = find_first_video(usb_path_master)
+        print(f"[DEBUG MASTER] Video Master trovato: {MASTER_VIDEO_PATH}")
     else:
         print("[DEBUG MASTER] Chiavetta USB non trovata sul Master.")
+        sys.exit(1)
+
+    if not DEBUG_MODE and SEND_TO_SLAVE:
+        print("[DEBUG MASTER] Attendo che lo Slave sia pronto...")
+        while not check_slave_ready():
+            time.sleep(2)
+
+        print("[DEBUG MASTER] Invio comando di avvio allo Slave...")
+        send_start_command_to_slave()
+    elif SEND_TO_SLAVE:
+        print("[DEBUG MASTER] Modalità DEBUG attiva o invio disabilitato: non attendo/invio allo Slave.")
+
+    if MASTER_VIDEO_PATH:
+        print("[DEBUG MASTER] Avvio video sul Master...")
+        play_video_master(MASTER_VIDEO_PATH)
+        if master_process:
+            print("[DEBUG MASTER] Riproduzione Master avviata (Ctrl+C per terminare).")
+            try:
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+        else:
+            print("[DEBUG MASTER] Errore nell'avvio del video sul Master.")
+    else:
+        print("[DEBUG MASTER] Nessun video trovato per il Master.")
+
+    print("[DEBUG MASTER] Script Master terminato.")
