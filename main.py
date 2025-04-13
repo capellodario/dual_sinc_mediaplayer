@@ -9,6 +9,7 @@ MOUNT_POINT = "/media/muchomas/"
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
+SEND_TO_SLAVE = True  # Imposta a False per disabilitare l'invio del comando allo Slave
 
 def find_first_video(base_path):
     """Cerca il primo file video trovato in tutte le sottocartelle del percorso base."""
@@ -70,20 +71,25 @@ if __name__ == "__main__":
             print(f"Avvio video sul Master: {master_video_path}")
             master_process = play_video_master(master_video_path)
             time.sleep(1)  # Piccolo ritardo per dare tempo al Master di avviarsi
-            print("Invio comando di avvio allo Slave...")
-            try:
-                trigger_slave()
-                print("Comando inviato allo Slave.")
+
+            if SEND_TO_SLAVE:
+                print("Invio comando di avvio allo Slave...")
                 try:
-                    if master_process:
-                        master_process.wait()  # Mantieni in esecuzione fino all'interruzione
-                except KeyboardInterrupt:
-                    print("Interruzione, terminazione del Master...")
-                    if master_process:
-                        master_process.terminate()
-                        master_process.wait()
-            except subprocess.CalledProcessError as e:
-                print(f"Errore nell'invio del comando allo Slave: {e}")
+                    trigger_slave()
+                    print("Comando inviato allo Slave.")
+                except subprocess.CalledProcessError as e:
+                    print(f"Errore nell'invio del comando allo Slave: {e}")
+            else:
+                print("Invio comando allo Slave disabilitato.")
+
+            try:
+                if master_process:
+                    master_process.wait()  # Mantieni in esecuzione fino all'interruzione
+            except KeyboardInterrupt:
+                print("Interruzione, terminazione del Master...")
+                if master_process:
+                    master_process.terminate()
+                    master_process.wait()
         else:
             print("Nessun file video trovato per il Master.")
     else:
