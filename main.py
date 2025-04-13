@@ -18,7 +18,7 @@ def play_fullscreen_video(video_path):
     return process
 
 if __name__ == "__main__":
-    time.sleep(5)  # Attendi che l'ambiente desktop sia pronto
+    time.sleep(30)  # Attendi che l'ambiente desktop sia pronto
 
     video_process = play_fullscreen_video(video_path)
 
