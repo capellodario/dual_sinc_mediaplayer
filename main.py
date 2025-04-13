@@ -21,9 +21,9 @@ def play_video_on_screen(video_path, screen_number):
 if __name__ == "__main__":
     time.sleep(5)
 
-    process1 = play_video_on_screen(video1_path, 0)
-    time.sleep(0.5)  # Piccolo ritardo per tentare la sincronizzazione
     process2 = play_video_on_screen(video2_path, 1)
+    time.sleep(0.5)
+    process1 = play_video_on_screen(video1_path, 0)
 
     try:
         while True:
