@@ -12,9 +12,16 @@ SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True
 SEND_TO_SLAVE = False
-VLC_OUTPUT_MODULE = "wl_dmabuf"
 MASTER_VIDEO_PATH = None  # Variabile globale per il percorso del video Master
 master_process = None
+VLC_COMMAND = [
+    "cvlc",
+    "--vout=wl_dmabuf",
+    "--loop",
+    "--fullscreen",
+    "--no-osd",
+    "--codec=h264"
+]
 
 def find_first_video(base_path):
     """Cerca il primo file video trovato."""
@@ -52,19 +59,16 @@ def send_start_command_to_slave():
 def play_video_master(video_path):
     """Riproduce il video in loop a schermo intero sul Master."""
     if video_path:
-        vlc_command = [
-            "cvlc",
-            "--vout=wl_dmabuf",
-            "--loop",
-            "--fullscreen",
-            "--no-osd",
-            "--codec=h264",
-            video_path,
-        ]
+        vlc_command = VLC_COMMAND + [video_path]
         print(f"[DEBUG MASTER] Comando VLC Master: {vlc_command}")
         global master_process
-        master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return master_process
+        try:
+            master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return master_process
+        except FileNotFoundError:
+            print("[DEBUG MASTER] Errore: cvlc non trovato. Assicurati che VLC sia installato.")
+        except Exception as e:
+            print(f"[DEBUG MASTER] Errore nell'avvio di VLC: {e}")
     return None
 
 def signal_handler(sig, frame):
@@ -78,7 +82,7 @@ def signal_handler(sig, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
-    time.sleep(10) # Attendi montaggio USB Master
+    time.sleep(15) # Aumento l'attesa per il montaggio USB Master
 
     usb_path_master = glob.glob(f"{MOUNT_POINT_MASTER}*")[0] if glob.glob(f"{MOUNT_POINT_MASTER}*") else None
 
