@@ -1,10 +1,10 @@
-import subprocess
 import time
 import os
 import glob
 import socket
 import signal
 import sys
+import subprocess
 
 # --- Configurazione (Master) ---
 MOUNT_POINT_MASTER = "/media/muchomas/" # Punto di mount della chiavetta USB del Master
@@ -14,14 +14,6 @@ DEBUG_MODE = True
 SEND_TO_SLAVE = False
 MASTER_VIDEO_PATH = None  # Variabile globale per il percorso del video Master
 master_process = None
-VLC_COMMAND = [
-    "cvlc",
-    "--vout=wl_dmabuf",
-    "--loop",
-    "--fullscreen",
-    "--no-osd",
-    "--codec=h264"
-]
 
 def find_first_video(base_path):
     """Cerca il primo file video trovato."""
@@ -57,18 +49,21 @@ def send_start_command_to_slave():
         return False
 
 def play_video_master(video_path):
-    """Riproduce il video in loop a schermo intero sul Master."""
+    """Riproduce il video in loop a schermo intero sul Master con ffmpeg."""
     if video_path:
-        vlc_command = VLC_COMMAND + [video_path]
-        print(f"[DEBUG MASTER] Comando VLC Master: {vlc_command}")
+        ffmpeg_command = [
+            "ffmpeg",
+            "-re",  # Leggi l'input alla velocità nativa
+            "-i", video_path,
+            "-vf", "format=pix_fmts=rgb24",  # Forza un formato pixel comune
+            "-an",  # Disabilita l'audio per semplicità iniziale (rimuovi se necessario)
+            "-loop", "0",  # Loop infinito
+            "-f", "fbdev", "/dev/fb0"  # Output su framebuffer (potrebbe richiedere modifiche)
+        ]
+        print(f"[DEBUG MASTER] Comando FFmpeg Master: {ffmpeg_command}")
         global master_process
-        try:
-            master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return master_process
-        except FileNotFoundError:
-            print("[DEBUG MASTER] Errore: cvlc non trovato. Assicurati che VLC sia installato.")
-        except Exception as e:
-            print(f"[DEBUG MASTER] Errore nell'avvio di VLC: {e}")
+        master_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        return master_process
     return None
 
 def signal_handler(sig, frame):
@@ -82,7 +77,7 @@ def signal_handler(sig, frame):
 
 if __name__ == "__main__":
     signal.signal(signal.SIGINT, signal_handler)
-    time.sleep(15) # Aumento l'attesa per il montaggio USB Master
+    time.sleep(10) # Attendi montaggio USB Master
 
     usb_path_master = glob.glob(f"{MOUNT_POINT_MASTER}*")[0] if glob.glob(f"{MOUNT_POINT_MASTER}*") else None
 
