@@ -6,11 +6,11 @@ video1_path = "/media/muchomas/rasp_key/1.mp4"
 video2_path = "/media/muchomas/rasp_key/2.mp4"
 
 def play_video_on_display(video_path, display_name):
+        
     command = [
         "/usr/bin/mpv",
-        "--vo=x11",  # Prova il backend X11
+        "--vo=x11:display={display_name}",
         "--fullscreen=yes",
-        f"--display-device={display_name}",
         "--loop",
         "--no-osc",
         video_path
