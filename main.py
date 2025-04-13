@@ -47,24 +47,21 @@ def send_start_command_to_slave():
     except (socket.error, socket.timeout):
         print("[DEBUG MASTER] Errore nell'invio del comando allo Slave.")
         return False
-
 def play_video_master(video_path):
-    """Riproduce il video in loop a schermo intero sul Master con ffmpeg."""
+    """Riproduce il video in loop a schermo intero sul Master."""
     if video_path:
-        ffmpeg_command = [
-            "ffmpeg",
-            "-re",
-            "-i", video_path,
-            "-vf", "format=pix_fmts=rgb565le",  # Usa il formato suggerito
-            "-an",
-            "-loop", "0",
-            "-f", "fbdev", "/dev/fb0"
+        vlc_command = [
+            "cvlc",
+            "--vout=wl_dmabuf",
+            "--loop",
+            "--fullscreen",
+            "--no-osd",
+            "--codec=h264",
+            video_path,
         ]
-
-        
-        print(f"[DEBUG MASTER] Comando FFmpeg Master: {ffmpeg_command}")
+        print(f"[DEBUG MASTER] Comando VLC Master: {vlc_command}")
         global master_process
-        master_process = subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        master_process = subprocess.Popen(vlc_command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return master_process
     return None
 
