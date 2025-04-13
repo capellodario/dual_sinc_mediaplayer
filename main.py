@@ -6,16 +6,15 @@ video1_path = "/media/muchomas/rasp_key/1.mp4"
 video2_path = "/media/muchomas/rasp_key/2.mp4"
 
 def play_video_on_display(video_path, display_name):
-        
     command = [
         "/usr/bin/mpv",
-        "--vo=x11:display={display_name}",
+        "--vo=x11",  # Prova il backend X11
         "--fullscreen=yes",
+        f"--display-device={display_name}",
         "--loop",
         "--no-osc",
         video_path
     ]
-    
     print(f"Avvio '{video_path}' su display: {display_name}")
     process = subprocess.Popen(command)  # Rimossa la reindirizzazione dell'output
     return process
@@ -24,7 +23,7 @@ if __name__ == "__main__":
     time.sleep(5)
 
     process1 = play_video_on_display(video1_path, "XWAYLAND0")
-    time.sleep(0.5)  # Piccolo ritardo per tentare la sincronizzazione
+    time.sleep(0.5)
     process2 = play_video_on_display(video2_path, "XWAYLAND1")
 
     try:
