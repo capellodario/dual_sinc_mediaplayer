@@ -9,7 +9,7 @@ MOUNT_POINT = "/media/muchomas/"
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
-SEND_TO_SLAVE = True  # Imposta a False per disabilitare l'invio del comando allo Slave
+SEND_TO_SLAVE = False  # Imposta a False per disabilitare l'invio del comando allo Slave
 
 def find_first_video(base_path):
     """Cerca il primo file video trovato in tutte le sottocartelle del percorso base."""
