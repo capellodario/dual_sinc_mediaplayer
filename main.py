@@ -9,7 +9,7 @@ MOUNT_POINT = "/media/muchomas/"
 SLAVE_IP_ADDRESS = "192.168.1.101"
 SLAVE_PORT = 12345  # Porta su cui lo Slave ascolterà
 DEBUG_MODE = True  # Imposta a False per abilitare l'attesa dello Slave
-SEND_TO_SLAVE = True  # Imposta a False per disabilitare l'invio del comando allo Slave
+SEND_TO_SLAVE = False  # Imposta a False per disabilitare l'invio del comando allo Slave
 VLC_OUTPUT_MODULE = "wl_dmabuf"  # Usa il modulo Wayland che funziona
 
 def find_first_video(base_path):
@@ -29,12 +29,13 @@ def check_slave_ready():
             return True
     except (socket.error, socket.timeout):
         return False
-
+    
 def play_video_master(video_path):
     """Riproduce il video in loop a schermo intero sul Master."""
     if video_path:
         vlc_command = [
             "cvlc",
+            "--vout=wl_dmabuf",  # Forza l'output Wayland
             "--loop",
             "--fullscreen",
             "--no-osd",  # Disabilita l'OSD per nascondere la scritta
@@ -48,6 +49,7 @@ def play_video_master(video_path):
             print(f"[DEBUG MASTER] Errore da VLC: {stderr.decode()}")
         return process
     return None
+
 
 def trigger_slave():
     """Invia un comando SSH per avviare la riproduzione sul Slave."""
