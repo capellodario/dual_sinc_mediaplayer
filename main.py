@@ -2,7 +2,7 @@ import subprocess
 import time
 import os
 
-video_path = "/media/muchomas/rasp_key/il_tuo_video_7680x2160.mp4"  # Sostituisci con il nuovo percorso
+video_path = "/media/muchomas/rasp_key/1.mp4"  # Sostituisci con il nuovo percorso
 
 def play_spanned_video(video_path):
     """Riproduce il video a schermo intero."""
