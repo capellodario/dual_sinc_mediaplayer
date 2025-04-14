@@ -1,3 +1,9 @@
+import subprocess
+import time
+import os
+
+video_path = "/media/muchomas/rasp_key/1.mp4"  # Sostituisci con il percorso del tuo video lungo
+
 def play_spanned_video(video_path):
     """Riproduce il video forzando a non mantenere le proporzioni."""
     command = [
@@ -12,7 +18,7 @@ def play_spanned_video(video_path):
     return process
 
 if __name__ == "__main__":
-    time.sleep(30)  # Attendi che l'ambiente desktop sia pronto
+    time.sleep(3)  # Attendi che l'ambiente desktop sia pronto
 
     video_process = play_spanned_video(video_path)
 
