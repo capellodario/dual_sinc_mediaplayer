@@ -5,21 +5,19 @@ import os
 video_path = "/media/muchomas/rasp_key/1.mp4"  # Sostituisci con il percorso del tuo video lungo
 
 def play_spanned_video(video_path):
-    """Riproduce il video adattando alla larghezza spalmata."""
+    """Riproduce il video senza forzare fullscreen o adattamento iniziale."""
     command = [
         "/usr/bin/mpv",
-        f"--autofit=7680x2160",
-        "--video-align=0",
         "--loop",
         "--no-osc",
         video_path
     ]
-    print(f"Avvio video adattando alla larghezza spalmata: {command}")
+    print(f"Avvio video semplice: {command}")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
 if __name__ == "__main__":
-    time.sleep(1)  # Attendi che l'ambiente desktop sia pronto
+    time.sleep(30)  # Attendi che l'ambiente desktop sia pronto
 
     video_process = play_spanned_video(video_path)
 
