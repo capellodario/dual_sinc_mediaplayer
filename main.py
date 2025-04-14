@@ -36,7 +36,7 @@ def play_fullscreen_video(video_path):
     return process
 
 if __name__ == "__main__":
-    time.sleep(3)  # Attendi che le unità siano montate
+    time.sleep(15)  # Attendi che le unità siano montate
 
     video_file = find_first_video()
 
