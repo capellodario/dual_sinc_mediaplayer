@@ -17,7 +17,7 @@ def play_spanned_video(video_path):
     return process
 
 if __name__ == "__main__":
-    time.sleep(30)  # Attendi che l'ambiente desktop sia pronto
+    time.sleep(2)  # Attendi che l'ambiente desktop sia pronto
 
     video_process = play_spanned_video(video_path)
 
