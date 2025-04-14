@@ -5,15 +5,17 @@ import os
 video_path = "/media/muchomas/rasp_key/1.mp4"  # Sostituisci con il percorso del tuo video lungo
 
 def play_fullscreen_video(video_path):
-    """Riproduce il video a schermo intero."""
+    """Riproduce il video a schermo intero forzando la geometria."""
+    geometry = "7680x2160+0+0"  # Larghezza totale x Altezza + X offset + Y offset
     command = [
         "/usr/bin/mpv",
         "--fullscreen=yes",
+        f"--geometry={geometry}",
         "--loop",
         "--no-osc",
         video_path
     ]
-    print(f"Avvio video a schermo intero: {command}")
+    print(f"Avvio video a schermo intero con geometria: {command}")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
