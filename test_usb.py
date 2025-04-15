@@ -5,7 +5,8 @@ import os
 
 DEVICE_LABEL = "rasp_key"  # Etichetta del file system della tua chiavetta
 MOUNT_POINT = "/media/usb_video" # Punto di mount desiderato
-VIDEO_PATH_RELATIVE = "test_1.mp4" # Percorso relativo del video sulla chiavetta
+VIDEO_PATH_RELATIVE = "test_1.mp4" # Nome ESATTO del file video
+# Se ci fosse un file audio indesiderato, NON lo includiamo qui
 
 def mount_usb_by_label(label, mount_point):
     """Monta un dispositivo USB in base alla sua etichetta."""
