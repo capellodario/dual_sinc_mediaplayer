@@ -5,8 +5,6 @@ import os
 
 DEVICE_LABEL = "rasp_key"  # Etichetta del file system della tua chiavetta
 MOUNT_POINT = "/media/usb_video" # Punto di mount desiderato
-VIDEO_PATH_RELATIVE = "test_1.mp4" # Nome ESATTO del file video
-# Se ci fosse un file audio indesiderato, NON lo includiamo qui
 
 def mount_usb_by_label(label, mount_point):
     """Monta un dispositivo USB in base alla sua etichetta."""
@@ -41,37 +39,43 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_video_loop_manual(video_path):
-    """Riproduce un video in loop manualmente."""
-    if os.path.exists(video_path):
-        instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=any")
-        if instance is None:
-            print("Errore nell'inizializzazione di VLC.")
-            return False
-        player = instance.media_player_new()
-        media = instance.media_new(video_path)
-        player.set_media(media)
-
-        print(f"Riproduzione in loop avviata da: {video_path} (premi Ctrl+C per interrompere)")
-        try:
-            while True:
-                player.play()
-                while player.is_playing():
+def play_first_video_loop(mount_point):
+    """Riproduce in loop il primo file video trovato nel punto di mount."""
+    try:
+        video_files = [f for f in os.listdir(mount_point) if f.endswith(('.mp4', '.avi', '.mkv', '.mov'))]
+        if video_files:
+            video_path = os.path.join(mount_point, video_files[0])
+            print(f"Trovato file video: {video_path}")
+            instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=any")
+            if instance is None:
+                print("Errore nell'inizializzazione di VLC.")
+                return False
+            player = instance.media_player_new()
+            media = instance.media_new(video_path)
+            player.set_media(media)
+            player.set_loop(True)
+            player.play()
+            print(f"Riproduzione in loop avviata da: {video_path} (premi Ctrl+C per interrompere)")
+            try:
+                while True:
                     time.sleep(1)
+            except KeyboardInterrupt:
+                print("\nRiproduzione interrotta.")
                 player.stop()
-                time.sleep(0.5) # Breve pausa prima di riavviare
-        except KeyboardInterrupt:
-            print("\nRiproduzione interrotta.")
-            player.stop()
-            instance.release()
-            return True
-    else:
-        print(f"File video non trovato in: {video_path}")
+                instance.release()
+                return True
+        else:
+            print(f"Nessun file video trovato in: {mount_point}")
+            return False
+    except FileNotFoundError:
+        print(f"Punto di mount non trovato: {mount_point}")
+        return False
+    except Exception as e:
+        print(f"Si è verificato un errore durante la ricerca dei file video: {e}")
         return False
 
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        video_full_path = os.path.join(MOUNT_POINT, VIDEO_PATH_RELATIVE)
-        play_video_loop_manual(video_full_path)
+        play_first_video_loop(MOUNT_POINT)
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
