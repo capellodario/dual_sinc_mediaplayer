@@ -102,7 +102,7 @@ if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
         video_to_play = find_first_valid_video(MOUNT_POINT)
         if video_to_play:
-            play_video_fullscreen_loop(video_to_play)
+            play_video_fullscreen_loop_with_assertions(video_to_play)
         else:
             print("Nessun video da riprodurre.")
     else:
