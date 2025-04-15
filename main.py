@@ -46,9 +46,9 @@ def find_first_video(mount_point=MOUNT_POINT):
         return None
 
 def play_fullscreen_video(video_path):
-    command = ["mpv", "--fullscreen", "--loop", "--autofit=100%", "--hwdec=auto", "--vo=gpu"]
+    command = ["mpv", "--fullscreen", "--loop", "--autofit=100%", "--hwdec=rpi", "--vo=rpi"]
     command.append(video_path)
-    print(f"Avvio video a schermo intero con mpv (loop attivato, hwdec=auto, vo=gpu): {command}")
+    print(f"Avvio video a schermo intero con mpv (loop attivato, hwdec=rpi, vo=rpi): {command}")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
