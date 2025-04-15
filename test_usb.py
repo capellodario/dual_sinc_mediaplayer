@@ -58,20 +58,23 @@ def find_first_valid_video(mount_point):
 
 
 def play_video_fullscreen_loop(video_path):
-    """Riproduce un video a schermo intero una volta."""
+    """Riproduce un video a schermo intero in loop."""
     if not os.path.exists(video_path):
         print(f"Errore: File non trovato: {video_path}")
         return
 
     instance = vlc.Instance()
-    player = instance.media_player_new()
-    media = vlc.Media(video_path)
-
-    player.set_media(media)
+    player = instance.media_player_new(video_path)
+    player.set_fullscreen(True)  # Enable fullscreen
     player.play()
-    print(f"Avvio riproduzione a schermo intero: {video_path}")
+    print(f"Riproduzione in loop avviata: {video_path}")
 
-    
+    while True:
+        time.sleep(1)
+        if player.get_state() == vlc.State.Ended:
+            player.set_media(instance.media_new(video_path))
+            player.play()
+            print("Riavvio.")
 
 if __name__ == "__main__":
     
