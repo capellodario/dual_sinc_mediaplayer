@@ -49,7 +49,7 @@ def play_fullscreen_video(video_path):
     
     command = ["cvlc", "--fullscreen", "--loop", video_path]
     print(f"Avvio video a schermo intero con cvlc (loop attivato): {command}")
-    process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    process = subprocess.Popen(command) # Rimossa la redirezione dell'output
     return process
 
 def send_sync_command(slave_ip):
