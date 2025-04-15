@@ -62,7 +62,7 @@ def play_video_fullscreen_loop_with_assertions(video_path):
     assert isinstance(video_path, str), "video_path deve essere una stringa"
     assert os.path.exists(video_path), f"Il file video non esiste nel percorso: {video_path}"
 
-    instance = vlc.Instance()
+    instance = vlc.Instance("--vout=x11")  # PROVA QUESTO OUTPUT VIDEO
     assert instance is not None, "Impossibile creare l'istanza VLC"
 
     player = instance.media_player_new(video_path)
@@ -95,7 +95,6 @@ def play_video_fullscreen_loop_with_assertions(video_path):
         assert player.get_state() == vlc.State.Ended or player.get_state() == vlc.State.Stopped, f"Stato del player inatteso dopo lo stop: {player.get_state()}"
         instance.release()
         print("Risorse VLC rilasciate.")
-
 
 if __name__ == "__main__":
     
