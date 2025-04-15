@@ -39,6 +39,23 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
+def find_first_valid_video(mount_point):
+    """Trova il percorso del primo file video valido nel punto di mount."""
+    video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
+    try:
+        items = os.listdir(mount_point)
+        for item in items:
+            if not item.startswith('._') and item.lower().endswith(video_extensions):
+                return os.path.join(mount_point, item)
+        print(f"Nessun file video valido trovato in: {mount_point}")
+        return None
+    except FileNotFoundError:
+        print(f"Punto di mount non trovato: {mount_point}")
+        return None
+    except Exception as e:
+        print(f"Si è verificato un errore nella ricerca dei video: {e}")
+        return None
+
 
 def play_video_fullscreen_loop(video_path):
     """Riproduce un video a schermo intero una volta."""
@@ -57,22 +74,12 @@ def play_video_fullscreen_loop(video_path):
     
 
 if __name__ == "__main__":
+    
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        # Find the first valid video file in the mounted directory and play it in a loop
-        video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
-        try:
-            items = os.listdir(MOUNT_POINT)
-            for item in items:
-                if not item.startswith('._') and item.lower().endswith(video_extensions):
-                    video_path = os.path.join(MOUNT_POINT, item)
-                    play_video_fullscreen_loop(video_path)
-                    # Exit the loop after starting the first valid video
-                    break
-            else:
-                print(f"Nessun file video valido trovato in: {MOUNT_POINT}")
-        except FileNotFoundError:
-            print(f"Punto di mount non trovato: {MOUNT_POINT}")
-        except Exception as e:
-            print(f"Si è verificato un errore nella ricerca dei video: {e}")
+        video_to_play = find_first_valid_video(MOUNT_POINT)
+        if video_to_play:
+            play_video_fullscreen_loop(video_to_play)
+        else:
+            print("Nessun video da riprodurre.")
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
