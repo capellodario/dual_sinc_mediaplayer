@@ -1,4 +1,4 @@
-import vlc
+iimport vlc
 import time
 import subprocess
 import os
@@ -58,9 +58,23 @@ def play_video_fullscreen_loop(video_path):
             player.play()
             print("Riavvio.")
 
-
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        play_first_valid_video_once(MOUNT_POINT)
+        # Find the first valid video file in the mounted directory and play it in a loop
+        video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
+        try:
+            items = os.listdir(MOUNT_POINT)
+            for item in items:
+                if not item.startswith('._') and item.lower().endswith(video_extensions):
+                    video_path = os.path.join(MOUNT_POINT, item)
+                    play_video_fullscreen_loop(video_path)
+                    # Exit the loop after starting the first valid video
+                    break
+            else:
+                print(f"Nessun file video valido trovato in: {MOUNT_POINT}")
+        except FileNotFoundError:
+            print(f"Punto di mount non trovato: {MOUNT_POINT}")
+        except Exception as e:
+            print(f"Si è verificato un errore nella ricerca dei video: {e}")
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
