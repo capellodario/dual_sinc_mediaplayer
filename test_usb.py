@@ -1,4 +1,4 @@
-iimport vlc
+import vlc
 import time
 import subprocess
 import os
