@@ -39,41 +39,25 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_video_loop(video_path):
-    """Riproduce un video in loop a schermo intero."""
-    try:
-        if not os.path.exists(video_path):
-            print(f"Errore: File non trovato: {video_path}")
-            return False
+def play_video_fullscreen_loop(video_path):
+    """Riproduce un video a schermo intero in loop."""
+    if not os.path.exists(video_path):
+        print(f"Errore: File non trovato: {video_path}")
+        return
 
-        instance = vlc.Instance("--vout=dispmanx")  # Prova dispmanx per Raspberry Pi
-        if instance is None:
-            print("Errore nell'inizializzazione di VLC.")
-            return False
+    instance = vlc.Instance()
+    player = instance.media_player_new(video_path)
+    player.set_fullscreen(True)
+    player.play()
+    print(f"Riproduzione in loop avviata: {video_path}")
 
-        player = instance.media_player_new(video_path)
-        player.set_fullscreen(True)
-        player.play()
-        print(f"Riproduzione in loop avviata: {video_path}")
+    while True:
+        time.sleep(1)
+        if player.get_state() == vlc.State.Ended:
+            player.set_media(instance.media_new(video_path))
+            player.play()
+            print("Riavvio.")
 
-        try:
-            while True:
-                time.sleep(1)
-                if player.get_state() == vlc.State.Ended:
-                    player.set_media(instance.media_new(video_path))
-                    player.play()
-                    print("Riavvio riproduzione.")
-        except KeyboardInterrupt:
-            print("Interruzione da tastiera. Arresto del video.")
-        finally:
-            player.stop()
-            instance.release()
-            print("VLC rilasciato.")
-            return True
-
-    except Exception as e:
-        print(f"Si è verificato un errore: {e}")
-        return False
 
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
