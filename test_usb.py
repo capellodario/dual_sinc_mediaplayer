@@ -48,7 +48,7 @@ def play_video_fullscreen_loop(video_path):
 
     instance = vlc.Instance()
     player = instance.media_player_new()
-    media = vlc.Media_new(video_path)
+    media = vlc.Media(video_path)
 
     player.set_media(media)
     player.play()
