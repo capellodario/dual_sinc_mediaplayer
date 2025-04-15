@@ -45,7 +45,7 @@ def play_video_fullscreen_loop(video_path):
         print(f"Errore: File non trovato: {video_path}")
         return
 
-    instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=none")
+    instance = vlc.Instance()
     player = instance.media_player_new(video_path)
     player.set_fullscreen(True)
     player.play()
