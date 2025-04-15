@@ -44,7 +44,12 @@ def play_video_from_path_loop(video_path):
     """Riproduce un video in loop dal percorso specificato."""
     if os.path.exists(video_path):
         # Forza l'output su dispmanx e abilita l'accelerazione hardware
-        instance = vlc.Instance("--vout=dispmanx", "--hwtimer-system", "--avcodec-hw=any")
+        instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=any")
+        # Prova questa se la precedente non funziona:
+        # instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=mmal")
+        if instance is None:
+            print("Errore nell'inizializzazione di VLC.")
+            return False
         player = instance.media_player_new()
         media = instance.media_new(video_path)
         player.set_media(media)
