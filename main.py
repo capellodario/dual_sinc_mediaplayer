@@ -4,7 +4,6 @@ import os
 import glob
 import socket
 import netifaces as ni
-import argparse
 
 # Configurazione comune
 CONTROL_PORT = 12345
@@ -136,26 +135,29 @@ if __name__ == "__main__":
         else:
             if video_file:
                 print(f"(Slave - {hostname}) Nessun cavo Ethernet rilevato. Riproduzione video locale.")
-                play_fullscreen_video(video_file)
+                slave_process = play_fullscreen_video(video_file)
                 try:
                     while True:
                         time.sleep(1)
                 except KeyboardInterrupt:
+                    if slave_process:
+                        slave_process.terminate()
+                        slave_process.wait()
                     print(f"(Slave - {hostname}) Processo video terminato.")
             else:
                 print(f"(Slave - {hostname}) Nessun video da riprodurre localmente.")
-
     else:
-        # Ruolo sconosciuto
-        if video_file:
-            print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto. Riproduzione locale.")
-            play_fullscreen_video(video_file)
-            try:
-                while True:
-                    time.sleep(1)
+            # Ruolo sconosciuto
+            if video_file:
+                print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto. Riproduzione locale.")
+                unknown_process = play_fullscreen_video(video_file)
+                try:
+                    while True:
+                        time.sleep(1)
                 except KeyboardInterrupt:
+                    if unknown_process:
+                        unknown_process.terminate()
+                        unknown_process.wait()
                     print(f"(Sconosciuto - {hostname}) Processo video terminato.")
             else:
                 print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto e nessun video trovato.")
-        else:
-            print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto e nessun video trovato.")
