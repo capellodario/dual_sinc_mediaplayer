@@ -9,10 +9,13 @@ import threading
 # Configurazione comune
 CONTROL_PORT = 12345
 MASTER_HOSTNAME = "nomehost-master"
-SLAVE_HOSTNAMES = ["nomehost-slave1", "nomehost-slave2", "nomehost-slave3", "nomehost-slave4"]
+SLAVE_HOSTNAMES = ["nomehost-slave1", "nomehost-slave2"]
 ETHERNET_INTERFACE = "eth0"
 MOUNT_POINT = "/media/muchomas"
-SYNC_COMMAND = "PLAY_SYNC"  # Comando per avviare la riproduzione sincronizzata
+SYNC_COMMAND = "PLAY_SYNC"
+SLAVE_READY_RESPONSE = "READY"
+SLAVE_CHECK_INTERVAL = 2  # Secondi tra i tentativi di ping degli slave
+SLAVE_READY_TIMEOUT = 10  # Secondi totali da attendere per ogni slave
 
 def get_hostname():
     return socket.gethostname()
@@ -43,14 +46,12 @@ def find_first_video(mount_point=MOUNT_POINT):
         return None
 
 def play_fullscreen_video(video_path):
-    """Riproduce il video a schermo intero con mpv in loop."""
     command = ["mpv", "--fullscreen", "--loop", video_path]
     print(f"Avvio video a schermo intero con mpv (loop attivato): {command}")
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
 def send_sync_command(slave_ip):
-    """Invia un comando di avvio sincronizzato al Raspberry Pi slave."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((slave_ip, CONTROL_PORT))
@@ -63,6 +64,19 @@ def send_sync_command(slave_ip):
     except Exception as e:
         print(f"Errore durante l'invio del comando a {slave_ip}: {e}")
         return False
+
+def check_slave_ready(slave_ip):
+    """Verifica se lo slave è in ascolto sulla porta di controllo."""
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.settimeout(1)  # Timeout breve per non bloccare troppo
+            s.connect((slave_ip, CONTROL_PORT))
+            s.sendall(b"ARE_YOU_READY")
+            response = s.recv(1024).decode().strip()
+            return response == SLAVE_READY_RESPONSE
+    except (ConnectionRefusedError, TimeoutError, OSError):
+        return False
+    return False
 
 def handle_connection(conn, addr, is_master):
     print(f"Connesso da {addr}")
@@ -79,6 +93,8 @@ def handle_connection(conn, addr, is_master):
                     play_fullscreen_video(video_file)
                 else:
                     print(f"(Slave - {get_hostname()}) Nessun video trovato localmente per la riproduzione sincronizzata.")
+        elif message == "ARE_YOU_READY":
+            conn.sendall(SLAVE_READY_RESPONSE.encode())
         conn.sendall(b"OK")
 
 def start_server(is_master):
@@ -98,24 +114,41 @@ if __name__ == "__main__":
     if hostname == MASTER_HOSTNAME:
         # Comportamento da Master
         if ethernet_connected:
-            print("(Master) Cavo Ethernet rilevato. Avvio server e sincronizzazione slave.")
+            print("(Master) Cavo Ethernet rilevato. Avvio server e attendo che gli slave siano pronti.")
             # Avvia il server slave anche sul master
             threading.Thread(target=start_server, args=(True,)).start()
-            time.sleep(1) # Attendi l'avvio del server sugli slave
+            time.sleep(1) # Breve attesa per l'avvio del server locale
+
+            slave_ips = {}
+            for slave_hostname in SLAVE_HOSTNAMES:
+                try:
+                    slave_ips[slave_hostname] = socket.gethostbyname(slave_hostname)
+                except socket.gaierror:
+                    print(f"(Master) Impossibile risolvere l'IP per {slave_hostname}")
+
+            ready_slaves = {}
+            for slave_hostname, slave_ip in slave_ips.items():
+                print(f"(Master) Attendo che {slave_hostname} ({slave_ip}) sia pronto...")
+                start_time = time.time()
+                while time.time() - start_time < SLAVE_READY_TIMEOUT:
+                    if check_slave_ready(slave_ip):
+                        print(f"(Master) {slave_hostname} è pronto.")
+                        ready_slaves[slave_hostname] = slave_ip
+                        break
+                    time.sleep(SLAVE_CHECK_INTERVAL)
+                else:
+                    print(f"(Master) Timeout: {slave_hostname} non è diventato pronto entro {SLAVE_READY_TIMEOUT} secondi.")
 
             video_file_master = find_first_video()
             if video_file_master:
                 print(f"(Master) Trovato video: {video_file_master}")
-                # Avvia la riproduzione sul master PRIMA di inviare il comando agli slave
+                # Avvia la riproduzione sul master
                 master_process = play_fullscreen_video(video_file_master)
 
-                # Invia il comando di sincronizzazione agli slave
-                for slave_hostname in SLAVE_HOSTNAMES:
-                    try:
-                        slave_ip = socket.gethostbyname(slave_hostname)
-                        send_sync_command(slave_ip)
-                    except socket.gaierror:
-                        print(f"(Master) Impossibile risolvere l'IP per {slave_hostname}")
+                # Invia il comando di sincronizzazione agli slave pronti
+                print("(Master) Invio comando di sincronizzazione agli slave pronti.")
+                for slave_ip in ready_slaves.values():
+                    send_sync_command(slave_ip)
 
                 try:
                     while True:
@@ -175,5 +208,4 @@ if __name__ == "__main__":
                     print(f"(Slave - {hostname}) Processo video terminato.")
             else:
                 print(f"(Slave - {hostname}) Nessun video da riprodurre localmente.")
-
 
