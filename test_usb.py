@@ -39,8 +39,50 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_first_valid_video_loop(mount_point):
-    """Riproduce in loop il primo file video valido trovato nel punto di mount."""
+Python
+import vlc
+import time
+import subprocess
+import os
+
+DEVICE_LABEL = "rasp_key"  # Etichetta del file system della tua chiavetta
+MOUNT_POINT = "/media/usb_video" # Punto di mount desiderato
+
+def mount_usb_by_label(label, mount_point):
+    """Monta un dispositivo USB in base alla sua etichetta."""
+    device_path = None
+    try:
+        result = subprocess.run(["blkid", "-L", label], capture_output=True, text=True, check=True)
+        device_path = result.stdout.strip()
+        print(f"Trovato dispositivo con etichetta '{label}' in: {device_path}")
+    except subprocess.CalledProcessError:
+        print(f"Dispositivo con etichetta '{label}' non trovato.")
+        return False
+
+    if not os.path.exists(mount_point):
+        try:
+            subprocess.run(["sudo", "mkdir", "-p", mount_point], check=True)
+            print(f"Creato punto di mount: {mount_point}")
+        except subprocess.CalledProcessError as e:
+            print(f"Errore nella creazione del punto di mount: {e}")
+            return False
+
+    if device_path and not os.path.ismount(mount_point):
+        try:
+            subprocess.run(["sudo", "mount", device_path, mount_point], check=True)
+            print(f"Dispositivo montato su: {mount_point}")
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Errore nel montaggio: {e}")
+            return False
+    elif os.path.ismount(mount_point):
+        print(f"Il dispositivo con etichetta '{label}' è già montato su: {mount_point}")
+        return True
+    else:
+        return False
+
+def play_first_valid_video_once(mount_point):
+    """Riproduce una volta il primo file video valido trovato nel punto di mount."""
     try:
         video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
         video_files = [
@@ -57,17 +99,15 @@ def play_first_valid_video_loop(mount_point):
             player = instance.media_player_new()
             media = instance.media_new(video_path)
             player.set_media(media)
-            player.set_loop(True)
             player.play()
-            print(f"Riproduzione in loop avviata da: {video_path} (premi Ctrl+C per interrompere)")
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                print("\nRiproduzione interrotta.")
-                player.stop()
-                instance.release()
-                return True
+            print(f"Riproduzione avviata da: {video_path}")
+            # Mantieni lo script in esecuzione fino alla fine del video
+            while player.is_playing():
+                time.sleep(1)
+            print("Riproduzione completata.")
+            player.stop()
+            instance.release()
+            return True
         else:
             print(f"Nessun file video valido trovato in: {mount_point}")
             return False
@@ -80,6 +120,6 @@ def play_first_valid_video_loop(mount_point):
 
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        play_first_valid_video_loop(MOUNT_POINT)
+        play_first_valid_video_once(MOUNT_POINT)
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
