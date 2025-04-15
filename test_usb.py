@@ -59,7 +59,6 @@ def play_first_valid_video_once(mount_point):
             player.set_media(media)
             player.play()
             print(f"Riproduzione avviata da: {video_path}")
-            # Mantieni lo script in esecuzione fino alla fine del video
             while player.is_playing():
                 time.sleep(1)
             print("Riproduzione completata.")
