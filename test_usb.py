@@ -39,24 +39,29 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_video_fullscreen_loop(video_path):
-    """Riproduce un video a schermo intero in loop."""
+
+def play_video_fullscreen_loop(video_path)
+    """Riproduce un video a schermo intero una volta."""
     if not os.path.exists(video_path):
         print(f"Errore: File non trovato: {video_path}")
         return
 
     instance = vlc.Instance()
-    player = instance.media_player_new(video_path)
+    player = instance.media_player_new()
+    media = instance.media_new(video_path)
+
+    player.set_media(media)
     player.set_fullscreen(True)
     player.play()
-    print(f"Riproduzione in loop avviata: {video_path}")
+    print(f"Avvio riproduzione a schermo intero: {video_path}")
 
-    while True:
+    # Attendi il completamento della riproduzione
+    while player.is_playing():
         time.sleep(1)
-        if player.get_state() == vlc.State.Ended:
-            player.set_media(instance.media_new(video_path))
-            player.play()
-            print("Riavvio.")
+
+    print("Riproduzione completata.")
+    player.stop()
+    instance.release()
 
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
