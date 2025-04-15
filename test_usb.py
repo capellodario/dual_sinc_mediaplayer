@@ -40,7 +40,7 @@ def mount_usb_by_label(label, mount_point):
         return False
 
 
-def play_video_fullscreen_loop(video_path)
+def play_video_fullscreen_loop(video_path):
     """Riproduce un video a schermo intero una volta."""
     if not os.path.exists(video_path):
         print(f"Errore: File non trovato: {video_path}")
