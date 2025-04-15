@@ -4,13 +4,15 @@ import os
 import glob
 import socket
 import netifaces as ni
+import threading
 
 # Configurazione comune
 CONTROL_PORT = 12345
 MASTER_HOSTNAME = "nomehost-master"
-SLAVE_HOSTNAMES = ["nomehost-slave1", "nomehost-slave2"]
+SLAVE_HOSTNAMES = ["nomehost-slave1", "nomehost-slave2", "nomehost-slave3", "nomehost-slave4"]
 ETHERNET_INTERFACE = "eth0"
 MOUNT_POINT = "/media/muchomas"
+SYNC_COMMAND = "PLAY_SYNC"  # Comando per avviare la riproduzione sincronizzata
 
 def get_hostname():
     return socket.gethostname()
@@ -47,12 +49,13 @@ def play_fullscreen_video(video_path):
     process = subprocess.Popen(command, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     return process
 
-def send_play_command(slave_ip, video_path):
+def send_sync_command(slave_ip):
+    """Invia un comando di avvio sincronizzato al Raspberry Pi slave."""
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.connect((slave_ip, CONTROL_PORT))
-            s.sendall(f"PLAY:{video_path}".encode())
-        print(f"Comando PLAY inviato a {slave_ip}: {video_path}")
+            s.sendall(SYNC_COMMAND.encode())
+        print(f"Comando SYNC inviato a {slave_ip}")
         return True
     except ConnectionRefusedError:
         print(f"Connessione rifiutata da {slave_ip}. Assicurati che lo script slave sia in esecuzione.")
@@ -69,13 +72,13 @@ def handle_connection(conn, addr, is_master):
             break
         message = data.decode().strip()
         print(f"({'Master' if is_master else 'Slave'}) Ricevuto: {message}")
-        if message.startswith("PLAY:"):
-            video_path = message[5:]
-            video_file = find_first_video()
-            if video_file:
-                play_fullscreen_video(video_file)
-            else:
-                print(f"({'Master' if is_master else 'Slave'}) Nessun video trovato localmente.")
+        if message == SYNC_COMMAND:
+            if not is_master:
+                video_file = find_first_video()
+                if video_file:
+                    play_fullscreen_video(video_file)
+                else:
+                    print(f"(Slave - {get_hostname()}) Nessun video trovato localmente per la riproduzione sincronizzata.")
         conn.sendall(b"OK")
 
 def start_server(is_master):
@@ -85,57 +88,83 @@ def start_server(is_master):
         print(f"({'Master' if is_master else 'Slave'}) In ascolto sulla porta {CONTROL_PORT}...")
         while True:
             conn, addr = s.accept()
-            handle_connection(conn, addr, is_master)
+            threading.Thread(target=handle_connection, args=(conn, addr, is_master)).start()
 
 if __name__ == "__main__":
     time.sleep(5)
     hostname = get_hostname()
     ethernet_connected = is_ethernet_connected()
-    video_file = find_first_video()
 
     if hostname == MASTER_HOSTNAME:
         # Comportamento da Master
-        if video_file:
-            print(f"(Master) Trovato video: {video_file}")
-            master_process = play_fullscreen_video(video_file)
+        if ethernet_connected:
+            print("(Master) Cavo Ethernet rilevato. Avvio server e sincronizzazione slave.")
+            # Avvia il server slave anche sul master
+            threading.Thread(target=start_server, args=(True,)).start()
+            time.sleep(1) # Attendi l'avvio del server sugli slave
 
-            if ethernet_connected:
-                print("(Master) Cavo Ethernet rilevato. Invio comandi agli slave.")
-                import threading
-                slave_thread = threading.Thread(target=start_server, args=(True,))
-                slave_thread.daemon = True
-                slave_thread.start()
+            video_file_master = find_first_video()
+            if video_file_master:
+                print(f"(Master) Trovato video: {video_file_master}")
+                # Avvia la riproduzione sul master PRIMA di inviare il comando agli slave
+                master_process = play_fullscreen_video(video_file_master)
 
+                # Invia il comando di sincronizzazione agli slave
                 for slave_hostname in SLAVE_HOSTNAMES:
                     try:
                         slave_ip = socket.gethostbyname(slave_hostname)
-                        send_play_command(slave_ip, video_file)
+                        send_sync_command(slave_ip)
                     except socket.gaierror:
                         print(f"(Master) Impossibile risolvere l'IP per {slave_hostname}")
 
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    if master_process:
+                        master_process.terminate()
+                        master_process.wait()
+                    print("(Master) Processo video terminato.")
             else:
-                print("(Master) Nessun cavo Ethernet rilevato. Riproduzione solo locale.")
+                print("(Master) Nessun video da riprodurre.")
+        else:
+            video_file_master = find_first_video()
+            if video_file_master:
+                print("(Master) Nessun cavo Ethernet rilevato. Riproduzione locale.")
+                master_process = play_fullscreen_video(video_file_master)
+                try:
+                    while True:
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    if master_process:
+                        master_process.terminate()
+                        master_process.wait()
+                    print("(Master) Processo video terminato.")
+            else:
+                print("(Master) Nessun video da riprodurre.")
+
+    elif hostname in SLAVE_HOSTNAMES:
+        # Comportamento da Slave
+        if ethernet_connected:
+            print(f"(Slave - {hostname}) Cavo Ethernet rilevato. Avvio server e ricerca video locale.")
+            threading.Thread(target=start_server, args=(False,)).start()
+            video_file_slave = find_first_video()
+            if video_file_slave:
+                print(f"(Slave - {hostname}) Video trovato: {video_file_slave}. In attesa del comando SYNC.")
+                # Il percorso del video è ora pronto
+            else:
+                print(f"(Slave - {hostname}) Nessun video trovato localmente. In attesa del comando SYNC (ma non potrò riprodurre).")
 
             try:
                 while True:
                     time.sleep(1)
             except KeyboardInterrupt:
-                if master_process:
-                    master_process.terminate()
-                    master_process.wait()
-                print("(Master) Processo video terminato.")
+                print(f"(Slave - {hostname}) Server slave terminato.")
         else:
-            print("(Master) Nessun video da riprodurre.")
-
-    elif hostname in SLAVE_HOSTNAMES:
-        # Comportamento da Slave
-        if ethernet_connected:
-            print(f"(Slave - {hostname}) Cavo Ethernet rilevato. Avvio server in ascolto...")
-            start_server(False)
-        else:
-            if video_file:
+            video_file_slave = find_first_video()
+            if video_file_slave:
                 print(f"(Slave - {hostname}) Nessun cavo Ethernet rilevato. Riproduzione video locale.")
-                slave_process = play_fullscreen_video(video_file)
+                slave_process = play_fullscreen_video(video_file_slave)
                 try:
                     while True:
                         time.sleep(1)
@@ -146,18 +175,5 @@ if __name__ == "__main__":
                     print(f"(Slave - {hostname}) Processo video terminato.")
             else:
                 print(f"(Slave - {hostname}) Nessun video da riprodurre localmente.")
-    else:
-            # Ruolo sconosciuto
-            if video_file:
-                print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto. Riproduzione locale.")
-                unknown_process = play_fullscreen_video(video_file)
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    if unknown_process:
-                        unknown_process.terminate()
-                        unknown_process.wait()
-                    print(f"(Sconosciuto - {hostname}) Processo video terminato.")
-            else:
-                print(f"(Sconosciuto - {hostname}) Hostname non riconosciuto e nessun video trovato.")
+
+
