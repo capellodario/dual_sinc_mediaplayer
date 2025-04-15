@@ -39,13 +39,17 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_first_video_loop(mount_point):
-    """Riproduce in loop il primo file video trovato nel punto di mount."""
+def play_first_valid_video_loop(mount_point):
+    """Riproduce in loop il primo file video valido trovato nel punto di mount."""
     try:
-        video_files = [f for f in os.listdir(mount_point) if f.endswith(('.mp4', '.avi', '.mkv', '.mov'))]
+        video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
+        video_files = [
+            f for f in os.listdir(mount_point)
+            if f.endswith(video_extensions) and not f.startswith('._')
+        ]
         if video_files:
             video_path = os.path.join(mount_point, video_files[0])
-            print(f"Trovato file video: {video_path}")
+            print(f"Trovato file video valido: {video_path}")
             instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=any")
             if instance is None:
                 print("Errore nell'inizializzazione di VLC.")
@@ -65,7 +69,7 @@ def play_first_video_loop(mount_point):
                 instance.release()
                 return True
         else:
-            print(f"Nessun file video trovato in: {mount_point}")
+            print(f"Nessun file video valido trovato in: {mount_point}")
             return False
     except FileNotFoundError:
         print(f"Punto di mount non trovato: {mount_point}")
@@ -76,6 +80,6 @@ def play_first_video_loop(mount_point):
 
 if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        play_first_video_loop(MOUNT_POINT)
+        play_first_valid_video_loop(MOUNT_POINT)
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
