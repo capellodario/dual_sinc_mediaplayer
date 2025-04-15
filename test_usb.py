@@ -62,7 +62,8 @@ def play_video_fullscreen_loop_with_assertions(video_path):
     assert isinstance(video_path, str), "video_path deve essere una stringa"
     assert os.path.exists(video_path), f"Il file video non esiste nel percorso: {video_path}"
 
-    instance = vlc.Instance("--vout=x11")  # PROVA QUESTO OUTPUT VIDEO
+    instance = vlc.Instance("--vout=x11")  # PROVA QUESTO OUTPUT VIDEO (o altri come dispmanx, opengl)
+    # instance = vlc.Instance("--vout=x11", "--avcodec-hw=none") # PROVA ANCHE SENZA ACCELERAZIONE HW
     assert instance is not None, "Impossibile creare l'istanza VLC"
 
     player = instance.media_player_new(video_path)
@@ -78,23 +79,6 @@ def play_video_fullscreen_loop_with_assertions(video_path):
     player.play()
     assert player.is_playing(), "Impossibile avviare la riproduzione del video"
     print(f"Riproduzione in loop avviata: {video_path}")
-
-    try:
-        while True:
-            time.sleep(1)
-            assert player.get_state() in [vlc.State.Playing, vlc.State.Ended], f"Stato del player inatteso: {player.get_state()}"
-            if player.get_state() == vlc.State.Ended:
-                player.set_media(instance.media_new(video_path))
-                player.play()
-                assert player.is_playing(), "Impossibile riavviare la riproduzione del video"
-                print("Riavvio.")
-    except KeyboardInterrupt:
-        print("Interruzione manuale.")
-    finally:
-        player.stop()
-        assert player.get_state() == vlc.State.Ended or player.get_state() == vlc.State.Stopped, f"Stato del player inatteso dopo lo stop: {player.get_state()}"
-        instance.release()
-        print("Risorse VLC rilasciate.")
 
 if __name__ == "__main__":
     
