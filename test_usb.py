@@ -41,16 +41,15 @@ def mount_usb_by_label(label, mount_point):
         return False
 
 def play_video_from_path_loop(video_path):
-    """Riproduce un video in loop dal percorso specificato."""
+    """Riproduce un video in loop dal percorso specificato (versione aggiornata per il loop)."""
     if os.path.exists(video_path):
         instance = vlc.Instance()
-        player = instance.media_player_new()
         media = instance.media_new(video_path)
-        player.set_media(media)
-        player.set_loop(True)  # Imposta la riproduzione in loop
+        media_list = instance.media_list_new([media])  # Crea una lista media con il tuo video
+        player = instance.media_list_player_new()     # Crea un MediaListPlayer
+        player.set_media_list(media_list)             # Imposta la lista media nel player
         player.play()
         print(f"Riproduzione in loop avviata da: {video_path} (premi Ctrl+C per interrompere)")
-        # Mantieni lo script in esecuzione per la riproduzione continua
         try:
             while True:
                 time.sleep(1)
@@ -61,11 +60,5 @@ def play_video_from_path_loop(video_path):
     else:
         print(f"File video non trovato in: {video_path}")
         return False
-
-if __name__ == "__main__":
-    if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
-        video_full_path = os.path.join(MOUNT_POINT, VIDEO_PATH_RELATIVE)
-        play_video_from_path_loop(video_full_path)
-        # Non smontiamo la chiavetta qui perché il video è in loop
-    else:
-        print("Impossibile montare la chiavetta, riproduzione non avviata.")
+    
+    
