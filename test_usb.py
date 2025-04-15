@@ -67,6 +67,5 @@ if __name__ == "__main__":
     if mount_usb_by_label(DEVICE_LABEL, MOUNT_POINT):
         video_full_path = os.path.join(MOUNT_POINT, VIDEO_PATH_RELATIVE)
         play_video_from_path_loop(video_full_path)
-        # Non smontiamo la chiavetta qui perché il video è in loop
     else:
         print("Impossibile montare la chiavetta, riproduzione non avviata.")
