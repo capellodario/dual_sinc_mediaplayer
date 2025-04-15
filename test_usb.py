@@ -39,40 +39,40 @@ def mount_usb_by_label(label, mount_point):
     else:
         return False
 
-def play_first_valid_video_once(mount_point):
-    """Riproduce una volta il primo file video valido trovato nel punto di mount."""
+def play_video_loop(video_path):
+    """Riproduce un video in loop a schermo intero."""
     try:
-        video_extensions = ('.mp4', '.avi', '.mkv', '.mov')
-        video_files = [
-            f for f in os.listdir(mount_point)
-            if f.endswith(video_extensions) and not f.startswith('._')
-        ]
-        if video_files:
-            video_path = os.path.join(mount_point, video_files[0])
-            print(f"Trovato file video valido: {video_path}")
-            instance = vlc.Instance("--vout=dispmanx", "--avcodec-hw=any")
-            if instance is None:
-                print("Errore nell'inizializzazione di VLC.")
-                return False
-            player = instance.media_player_new()
-            media = instance.media_new(video_path)
-            player.set_media(media)
-            player.play()
-            print(f"Riproduzione avviata da: {video_path}")
-            while player.is_playing():
+        if not os.path.exists(video_path):
+            print(f"Errore: File non trovato: {video_path}")
+            return False
+
+        instance = vlc.Instance("--vout=dispmanx")  # Prova dispmanx per Raspberry Pi
+        if instance is None:
+            print("Errore nell'inizializzazione di VLC.")
+            return False
+
+        player = instance.media_player_new(video_path)
+        player.set_fullscreen(True)
+        player.play()
+        print(f"Riproduzione in loop avviata: {video_path}")
+
+        try:
+            while True:
                 time.sleep(1)
-            print("Riproduzione completata.")
+                if player.get_state() == vlc.State.Ended:
+                    player.set_media(instance.media_new(video_path))
+                    player.play()
+                    print("Riavvio riproduzione.")
+        except KeyboardInterrupt:
+            print("Interruzione da tastiera. Arresto del video.")
+        finally:
             player.stop()
             instance.release()
+            print("VLC rilasciato.")
             return True
-        else:
-            print(f"Nessun file video valido trovato in: {mount_point}")
-            return False
-    except FileNotFoundError:
-        print(f"Punto di mount non trovato: {mount_point}")
-        return False
+
     except Exception as e:
-        print(f"Si è verificato un errore durante la ricerca dei file video: {e}")
+        print(f"Si è verificato un errore: {e}")
         return False
 
 if __name__ == "__main__":
