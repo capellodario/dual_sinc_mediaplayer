@@ -5,6 +5,7 @@ import glob
 import socket
 import netifaces as ni
 import threading
+import vlc
 
 # Configurazione comune
 CONTROL_PORT = 12345
@@ -47,12 +48,14 @@ def find_first_video(mount_point=MOUNT_POINT):
 
 def play_fullscreen_video(video_path):
 
-    #command = ["mpv", "--fullscreen", "--loop", "--vo=rpi", "--hwdec=rpi", video_path] # Prova prima 'rpi' con hwdec
-    command = ["mpv", "--fullscreen", "--loop", "--vo=gpu", "--autofit=100%", video_path]     # Se 'rpi' non va, prova 'gpu'
-    # command = ["mpv", "--fullscreen", "--loop", "--vo=dispmanx", video_path]  # Un'altra opzione senza X
-    print(f"Avvio video a schermo intero con mpv (loop attivato, vo=rpi, hwdec=rpi): {command}")
-    process = subprocess.Popen(command)
-    return process
+    instance = vlc.Instance()
+    player = instance.media_player_new()
+    media = instance.media_new(video_path)
+    player.set_fullscreen(True)
+    player.set_media(media)
+    player.play()
+    print(f"Avvio video a schermo intero con VLC (loop attivato): {video_path}")
+    return player # Restituisci l'oggetto player per poterlo controllare in seguito (es. terminare)
 
 def send_sync_command(slave_ip):
     try:
