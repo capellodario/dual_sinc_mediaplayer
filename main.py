@@ -63,7 +63,7 @@ def play_fullscreen_video(video_path):
     try:
         subprocess.run(command, check=True)
     except subprocess.CalledProcessError as e:
-        print(f"Errore nell'esecuzione del comando: {e}")player # Restituisci l'oggetto player per poterlo controllare in seguito (es. terminare)
+        print(f"Errore nell'esecuzione del comando: {e}")# player Restituisci l'oggetto player per poterlo controllare in seguito (es. terminare)
 
 def send_sync_command(slave_ip):
     try:
