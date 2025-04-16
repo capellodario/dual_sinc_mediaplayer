@@ -56,6 +56,7 @@ def play_fullscreen_video(video_path):
             "cvlc",
             "--fullscreen",
             "--loop",
+            "--no-osd",  # Aggiunta per nascondere l'OSD
             video_path
         ]
 
