@@ -5,7 +5,6 @@ import glob
 import socket
 import netifaces as ni
 import threading
-import vlc
 
 # Configurazione comune
 CONTROL_PORT = 12345
@@ -47,15 +46,24 @@ def find_first_video(mount_point=MOUNT_POINT):
         return None
 
 def play_fullscreen_video(video_path):
+    # Crea il comando mpv con i parametri desiderati
+    command = [
+        "mpv",
+        "--fs",                     # Modalità fullscreen
+        "--loop=inf",               # Loop infinito
+        "--vo=gpu",                 # Usa il rendering GPU
+        "--scale=ewa_lanczos",      # Filtraggio Lanczos
+        "--autofit=100%",           # Adatta il video al 100% della finestra
+        "--hwdec=drm-copy",         # Decodifica hardware (modifica se necessario)
+        "--vd-lavc-threads=4",      # Numero di thread per il decoding video
+        video_path                  # Il percorso del video
+    ]
 
-    instance = vlc.Instance()
-    player = instance.media_player_new()
-    media = instance.media_new(video_path)
-    player.set_fullscreen(True)
-    player.set_media(media)
-    player.play()
-    print(f"Avvio video a schermo intero con VLC (loop attivato): {video_path}")
-    return player # Restituisci l'oggetto player per poterlo controllare in seguito (es. terminare)
+    # Esegui il comando usando subprocess
+    try:
+        subprocess.run(command, check=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Errore nell'esecuzione del comando: {e}")player # Restituisci l'oggetto player per poterlo controllare in seguito (es. terminare)
 
 def send_sync_command(slave_ip):
     try:
@@ -214,4 +222,3 @@ if __name__ == "__main__":
                     print(f"(Slave - {hostname}) Processo video terminato.")
             else:
                 print(f"(Slave - {hostname}) Nessun video da riprodurre localmente.")
-
