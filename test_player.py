@@ -1,5 +1,7 @@
 import vlc
 import time
+import os
+
 video_file = "test_vid.mp4"
 
 def play_4k_loop(video_path):
@@ -55,9 +57,6 @@ def play_4k_loop(video_path):
 
 if __name__ == "__main__":
 
-
-    # Verifica che il file video esista
-    import os
     if not os.path.exists(video_file):
         print(f"Errore: Il file video '{video_file}' non è stato trovato.")
     else:
