@@ -2,30 +2,34 @@ import vlc
 import time
 import subprocess
 import os
+import json
 
 def usb_video_handler(mount_point="/media/usb_video"):
-    """Rileva e monta la prima chiavetta USB disponibile e cerca video"""
     try:
         print("Cercando dispositivi USB...")
         # Trova tutti i dispositivi USB
-        lsblk_output = subprocess.run(["lsblk", "-J"],
+        lsblk_output = subprocess.run(["lsblk", "-J", "-o", "NAME,RM,TYPE,MOUNTPOINTS"],
                                     capture_output=True,
                                     text=True).stdout
-        print(f"Dispositivi trovati (lsblk):\n{lsblk_output}")
+        devices = json.loads(lsblk_output)
 
-        # Trova il primo dispositivo rimovibile
-        print("Cercando dispositivi con filesystem FAT...")
-        devices = subprocess.run(["findfs", "TYPE=vfat"],
-                               capture_output=True,
-                               text=True).stdout.split('\n')
-        print(f"Dispositivi FAT trovati: {devices}")
+        # Cerca specificamente dispositivi rimovibili (RM=1)
+        usb_device = None
+        for device in devices['blockdevices']:
+            print(f"Analisi dispositivo: {device['name']} (rimovibile: {device['rm']})")
+            if device['rm'] == true and device['type'] == "disk":
+                for partition in device.get('children', []):
+                    if partition['type'] == "part":
+                        usb_device = f"/dev/{partition['name']}"
+                        break
+                if usb_device:
+                    break
 
-        if not devices[0]:
-            print("Nessun dispositivo FAT trovato")
+        if not usb_device:
+            print("Nessuna chiavetta USB trovata")
             return None
 
-        device_path = devices[0]
-        print(f"Dispositivo selezionato: {device_path}")
+        print(f"Chiavetta USB trovata: {usb_device}")
 
         # Crea punto di mount se non esiste
         if not os.path.exists(mount_point):
@@ -35,9 +39,12 @@ def usb_video_handler(mount_point="/media/usb_video"):
         # Monta il dispositivo
         if not os.path.ismount(mount_point):
             print(f"Montaggio dispositivo in: {mount_point}")
-            subprocess.run(["sudo", "mount", device_path, mount_point], check=True)
+            subprocess.run(["sudo", "mount", usb_device, mount_point], check=True)
         else:
-            print("Dispositivo già montato")
+            print("Smontaggio punto di mount precedente...")
+            subprocess.run(["sudo", "umount", mount_point], check=True)
+            print(f"Montaggio nuovo dispositivo in: {mount_point}")
+            subprocess.run(["sudo", "mount", usb_device, mount_point], check=True)
 
         # Cerca video
         print("Ricerca video...")
@@ -58,36 +65,3 @@ def usb_video_handler(mount_point="/media/usb_video"):
         return None
 
     return None
-
-def play_video_fullscreen_loop(video_path):
-    print(f"Avvio riproduzione: {video_path}")
-    instance = vlc.Instance("--vout=egl")
-    player = instance.media_player_new(video_path)
-    media = instance.media_new(video_path)
-
-    player.set_media(media)
-    player.set_fullscreen(True)
-    player.play()
-    print("Video avviato in fullscreen")
-
-    try:
-        while True:
-            time.sleep(1)
-            if player.get_state() == vlc.State.Ended:
-                print("Riavvio video")
-                player.set_media(instance.media_new(video_path))
-                player.play()
-    except KeyboardInterrupt:
-        print("\nInterruzione manuale")
-        player.stop()
-        instance.release()
-        print("Riproduzione terminata")
-
-if __name__ == "__main__":
-    print("Avvio programma")
-    video_path = usb_video_handler()
-    if video_path:
-        print("Video trovato, avvio riproduzione")
-        play_video_fullscreen_loop(video_path)
-    else:
-        print("Nessun video da riprodurre")
