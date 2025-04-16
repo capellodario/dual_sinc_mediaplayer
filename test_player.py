@@ -1,40 +1,38 @@
 import vlc
 import time
-import os
 
+# Sostituisci con il percorso del tuo video
 VIDEO_PATH = "test_vid.mp4"
 
 def main():
-    if not os.path.exists(VIDEO_PATH):
-        print(f"[ERRORE] File non trovato: {VIDEO_PATH}")
-        return
-
-    print("[INFO] Avvio player VLC in loop, con accelerazione DRM.")
-
-    # Crea istanza VLC con output DRM (no GUI)
+    # Crea l'istanza di VLC
     instance = vlc.Instance([
-        "--avcodec-hw=drm",
-        "--vout=drm",
-        "--fullscreen",
-        "--no-osd",
-        "--no-video-title-show",
-        "--quiet"
+        "--avcodec-hw=drm",  # Utilizza accelerazione hardware se supportata
+        "--vout=drm",        # Usa l'output video DRM (senza X11)
+        "--fullscreen",      # Imposta il video a schermo intero
+        "--no-osd",          # Disabilita i messaggi OSD
+        "--no-video-title-show",  # Disabilita il titolo del video
+        "--quiet"            # Meno output nei log
     ])
 
+    # Crea un player
     player = instance.media_player_new()
+
+    # Crea un media dal percorso
     media = instance.media_new(VIDEO_PATH)
     player.set_media(media)
 
+    # Riproduci il video
     player.play()
     time.sleep(1)
 
-    print("[INFO] Video in esecuzione. Ctrl+C per uscire.")
-
+    # Loop per monitorare lo stato del player
+    print("[INFO] Avvio del video...")
     try:
         while True:
             state = player.get_state()
             if state == vlc.State.Ended:
-                print("[INFO] Video terminato. Riparte.")
+                print("[INFO] Video finito. Riparte.")
                 player.stop()
                 player.play()
             elif state == vlc.State.Error:
