@@ -1,2 +1,2 @@
 import vlc
-print(vlc.__version__)
+dir(vlc)
