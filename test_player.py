@@ -1,6 +1,6 @@
 import vlc
 import time
-video_file = "test_vid"
+video_file = "test_vid.mp4"
 
 def play_4k_loop(video_path):
     """
