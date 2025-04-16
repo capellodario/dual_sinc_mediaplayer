@@ -57,6 +57,7 @@ def play_fullscreen_video(video_path):
             "--fullscreen",
             "--loop",
             "--no-osd",  # Aggiunta per nascondere l'OSD
+            "--aout=pipewire",
             video_path
         ]
 
