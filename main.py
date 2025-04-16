@@ -46,29 +46,41 @@ def find_first_video(mount_point=MOUNT_POINT):
         return None
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero in loop usando mpv."""
-        assert isinstance(video_path, str), "video_path deve essere una stringa"
-        assert os.path.exists(video_path), f"Il file video non esiste nel percorso: {video_path}"
+        """
+        Riproduce un video a schermo intero in loop utilizzando cvlc.
 
+        Args:
+            video_path (str): Il percorso completo del file video.
+        """
         command = [
-            "mpv",
-            "--fs",                 # Modalità fullscreen
-            "--loop=inf",             # Loop infinito
-            "--vo=gpu",               # Usa il rendering GPU
-            "--scale=ewa_lanczos",    # Filtraggio Lanczos
-            "--autofit=100%",         # Adatta il video al 100% della finestra
-            "--hwdec=auto",           # Decodifica hardware automatica
-            "--vd-lavc-threads=4",    # Numero di thread per il decoding video
-            video_path                # Il percorso del video
+            "cvlc",
+            "--fullscreen",
+            "--loop",
+            video_path
         ]
 
-        print(f"Avvio riproduzione in loop con mpv: {video_path}")
+        print(f"Avvio riproduzione a schermo intero in loop con cvlc: {video_path}")
 
         try:
-            subprocess.run(command, check=True)
-            print("Riproduzione con mpv terminata.")
-        except subprocess.CalledProcessError as e:
-            print(f"Errore nell'esecuzione del comando mpv: {e}")
+            # Esegui cvlc come un processo in background
+            process = subprocess.Popen(command)
+            print("Riproduzione con cvlc avviata. Premi Ctrl+C per interrompere.")
+
+            # Mantieni lo script in esecuzione per consentire la riproduzione di cvlc
+            while True:
+                time.sleep(1)
+
+        except KeyboardInterrupt:
+            print("\nInterruzione richiesta. Terminando cvlc...")
+            # Termina il processo cvlc se l'utente preme Ctrl+C
+            if 'process' in locals() and process.poll() is None:
+                process.terminate()
+                process.wait()
+            print("cvlc terminato.")
+        except FileNotFoundError:
+            print("Errore: Il comando 'cvlc' non è stato trovato. Assicurati che VLC sia installato e che 'cvlc' sia nel PATH.")
+        except Exception as e:
+            print(f"Si è verificato un errore: {e}")
 
 def send_sync_command(slave_ip):
     try:
