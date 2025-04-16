@@ -1,7 +1,7 @@
 import vlc
 import time
 
-VIDEO_PATH = "test_h265.mp4"
+VIDEO_PATH = "test_vid.mp4"
 
 def main():
     instance = vlc.Instance(["--no-video-title-show", "--quiet"])
