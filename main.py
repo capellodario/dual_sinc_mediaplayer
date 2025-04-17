@@ -87,14 +87,20 @@ class VideoController:
             print(f"Errore invio comando RC: {e}")
         return False
 
-    def start_video(self, video_path):
+    def pause(self):
+        """Mette in pausa il video"""
+        self.send_rc_command("pause")
+
+    def prepare_video(self, video_path):
+        """Prepara il video ma lo mantiene in pausa"""
         with self.lock:
             self.video_path = video_path
             if self.video_process:
                 self.stop_video()
             self.video_process = play_fullscreen_video(video_path)
             if self.connect_rc():
-                time.sleep(0.5)  # Breve attesa per stabilizzazione
+                time.sleep(0.5)
+                self.pause()  # Metti subito in pausa
                 return self.video_process
             return None
 
@@ -137,9 +143,8 @@ def find_first_video(mount_point=MOUNT_POINT):
         for device in os.listdir(mount_point):
             device_path = os.path.join(mount_point, device)
 
-            # Verifica che sia una directory e un dispositivo rimovibile
+            # Verifica che sia una directory
             if os.path.isdir(device_path):
-                # Puoi aggiungere qui ulteriori verifiche per assicurarti che sia una USB
                 mounted_devices.append(device_path)
 
         if not mounted_devices:
@@ -169,7 +174,6 @@ def find_first_video(mount_point=MOUNT_POINT):
         return None
 
 def handle_master_connection(controller, slave_ip):
-    """Gestisce la connessione master-slave"""
     print(f"Tentativo connessione a slave: {slave_ip}")
     while controller.running:
         try:
@@ -179,13 +183,23 @@ def handle_master_connection(controller, slave_ip):
                 print(f"Connesso a slave: {slave_ip}")
                 controller.connected_slaves.add(slave_ip)
 
-                # Sincronizzazione iniziale
+                # Preparazione sincronizzata
                 s.sendall(b"PREPARE_SYNC")
                 if s.recv(1024).decode().strip() == "READY":
-                    time.sleep(2)  # Attesa per stabilizzazione
+                    print("Slave pronto, preparo countdown...")
+                    time.sleep(1)
+
+                    # Countdown sincronizzato
+                    for i in range(3, 0, -1):
+                        s.sendall(f"COUNTDOWN_{i}".encode())
+                        response = s.recv(1024).decode().strip()
+                        print(f"Sincronizzazione tra {i}...")
+                        time.sleep(1)
+
+                    # Avvio sincronizzato
                     s.sendall(SYNC_COMMAND.encode())
                     if s.recv(1024).decode().strip() == "VIDEO_STARTED":
-                        print("Sincronizzazione iniziale completata")
+                        print("Sincronizzazione completata")
                         controller.sync_playback()
 
                         # Loop di controllo
@@ -208,13 +222,16 @@ def handle_master_connection(controller, slave_ip):
             time.sleep(5)
 
 def main_master():
-    """Funzione principale del master"""
     controller = VideoController(is_master=True)
     video_file = find_first_video()
 
     if not video_file:
         print("Nessun video trovato")
         return
+
+    # Prepara il video in pausa
+    print("Preparo il video...")
+    controller.prepare_video(video_file)
 
     # Avvia thread per la connessione allo slave
     thread = threading.Thread(
@@ -234,21 +251,18 @@ def main_master():
         print("Attendo connessione slave...")
         time.sleep(1)
 
-    # Avvia il video e mantieni il processo
+    # Il video partirà tramite sync_playback nel thread di connessione
     try:
-        print("Avvio riproduzione in loop")
-        process = controller.start_video(video_file)
         while controller.running:
             if not controller.check_video_running():
                 print("Riavvio video dopo crash")
-                process = controller.start_video(video_file)
+                controller.prepare_video(video_file)
             time.sleep(1)
     except KeyboardInterrupt:
         print("Interruzione richiesta")
         controller.stop_video()
 
 def main_slave():
-    """Funzione principale dello slave"""
     controller = VideoController(is_master=False)
     print("Avvio slave in ascolto...")
 
@@ -277,11 +291,15 @@ def main_slave():
                             if message == "PREPARE_SYNC":
                                 video_file = find_first_video()
                                 if video_file:
-                                    controller.start_video(video_file)
+                                    controller.prepare_video(video_file)
                                     conn.sendall(b"READY")
                                 else:
                                     conn.sendall(b"NO_VIDEO")
                                     break
+
+                            elif message.startswith("COUNTDOWN_"):
+                                print(f"Sincronizzazione tra {message[-1]}...")
+                                conn.sendall(b"COUNTDOWN_OK")
 
                             elif message == SYNC_COMMAND:
                                 controller.sync_playback()
