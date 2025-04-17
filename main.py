@@ -1,22 +1,32 @@
 import subprocess
 import time
 import os
-import glob
 import socket
 import threading
+import ntplib
 
 # Configurazione comune
 CONTROL_PORT = 12345
 MASTER_HOSTNAME = "nomehost-master"
-SLAVE_HOSTNAMES = ["nomehost-slave1"]  # Solo uno slave
+SLAVE_HOSTNAMES = ["nomehost-slave1"]
 ETHERNET_INTERFACE = "eth0"
 MOUNT_POINT = "/media/muchomas"
 SYNC_COMMAND = "PLAY_SYNC"
-RC_PORT = 9090  # Porta per il controllo RC di VLC
+RC_PORT = 9090
+NTP_SERVER = "pool.ntp.org"
 
 # Configurazione IP
 MASTER_IP = "192.168.2.1"
 SLAVE_IPS = ["192.168.2.2"]
+
+def sync_system_time():
+    """Sincronizza l'orologio di sistema con NTP"""
+    try:
+        ntp_client = ntplib.NTPClient()
+        response = ntp_client.request(NTP_SERVER)
+        return True
+    except:
+        return False
 
 def get_hostname():
     return socket.gethostname()
@@ -26,7 +36,6 @@ def is_ethernet_connected():
     try:
         result = subprocess.run(['nmcli', '-g', 'GENERAL.STATE', 'con', 'show', 'dual-sync'],
                               capture_output=True, text=True)
-
         if "activated" in result.stdout.lower():
             target_ip = SLAVE_IPS[0] if get_hostname() == MASTER_HOSTNAME else MASTER_IP
             response = os.system(f"ping -I {ETHERNET_INTERFACE} -c 1 -W 1 {target_ip} > /dev/null 2>&1")
@@ -49,6 +58,13 @@ def play_fullscreen_video(video_path):
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
+        "--clock-jitter=0",
+        "--clock-synchro=0",
+        "--audio-desync=0",
+        "--sout-mux-caching=0",
+        "--network-caching=0",
+        "--live-caching=0",
+        "--file-caching=0",
         video_path
     ]
     print(f"Avvio riproduzione in loop: {video_path}")
@@ -64,11 +80,14 @@ class VideoController:
         self.rc_socket = None
         self.sync_ready = threading.Event()
         self.video_path = None
+        self.last_sync_time = 0
+        self.sync_interval = 2  # Sincronizza ogni 2 secondi
+        self.playback_position = 0
 
     def connect_rc(self):
         """Connette al controllo RC di VLC"""
         try:
-            time.sleep(1)  # Attendi che VLC sia pronto
+            time.sleep(1)
             self.rc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             self.rc_socket.connect(('localhost', RC_PORT))
             print("Connesso al controllo RC di VLC")
@@ -87,6 +106,24 @@ class VideoController:
             print(f"Errore invio comando RC: {e}")
         return False
 
+    def precise_sync_playback(self):
+        """Sincronizzazione precisa della riproduzione"""
+        self.send_rc_command("pause")
+        time.sleep(0.05)
+        self.send_rc_command("seek 0")
+        time.sleep(0.05)
+        self.send_rc_command("frame")
+        time.sleep(0.05)
+
+        # Sincronizzazione temporizzata
+        start_time = time.time()
+        while time.time() - start_time < 0.1:
+            pass
+
+        self.send_rc_command("play")
+        self.last_sync_time = time.time()
+        self.playback_position = 0
+
     def start_video(self, video_path):
         with self.lock:
             self.video_path = video_path
@@ -94,7 +131,7 @@ class VideoController:
                 self.stop_video()
             self.video_process = play_fullscreen_video(video_path)
             if self.connect_rc():
-                time.sleep(0.5)  # Breve attesa per stabilizzazione
+                time.sleep(0.5)
                 return self.video_process
             return None
 
@@ -114,11 +151,9 @@ class VideoController:
                     self.video_process.kill()
                 self.video_process = None
 
-    def sync_playback(self):
-        """Sincronizza la riproduzione"""
-        self.send_rc_command("seek 0")
-        time.sleep(0.1)
-        self.send_rc_command("play")
+    def need_sync(self):
+        current_time = time.time()
+        return current_time - self.last_sync_time >= self.sync_interval
 
     def check_video_running(self):
         """Verifica se il video è in esecuzione"""
@@ -127,20 +162,12 @@ class VideoController:
 def find_first_video(mount_point=MOUNT_POINT):
     """Trova il primo video nella prima chiavetta USB disponibile"""
     try:
-        # Verifica che il punto di mount esista
         if not os.path.exists(mount_point):
             print(f"Directory {mount_point} non trovata")
             return None
 
-        # Cerca tutte le directory nella cartella di mount
-        mounted_devices = []
-        for device in os.listdir(mount_point):
-            device_path = os.path.join(mount_point, device)
-
-            # Verifica che sia una directory e un dispositivo rimovibile
-            if os.path.isdir(device_path):
-                # Puoi aggiungere qui ulteriori verifiche per assicurarti che sia una USB
-                mounted_devices.append(device_path)
+        mounted_devices = [os.path.join(mount_point, d) for d in os.listdir(mount_point)
+                         if os.path.isdir(os.path.join(mount_point, d))]
 
         if not mounted_devices:
             print("Nessuna chiavetta USB trovata")
@@ -149,11 +176,8 @@ def find_first_video(mount_point=MOUNT_POINT):
         video_extensions = ['.mp4', '.avi', '.mkv', '.mov']
         print(f"Dispositivi trovati: {mounted_devices}")
 
-        # Cerca in ogni dispositivo montato
         for device_path in mounted_devices:
             print(f"Cerco video in: {device_path}")
-
-            # Cerca ricorsivamente nella directory
             for root, _, files in os.walk(device_path):
                 for file in files:
                     if any(file.lower().endswith(ext) for ext in video_extensions):
@@ -179,26 +203,26 @@ def handle_master_connection(controller, slave_ip):
                 print(f"Connesso a slave: {slave_ip}")
                 controller.connected_slaves.add(slave_ip)
 
-                # Sincronizzazione iniziale
                 s.sendall(b"PREPARE_SYNC")
                 if s.recv(1024).decode().strip() == "READY":
-                    time.sleep(2)  # Attesa per stabilizzazione
+                    time.sleep(1)
                     s.sendall(SYNC_COMMAND.encode())
                     if s.recv(1024).decode().strip() == "VIDEO_STARTED":
                         print("Sincronizzazione iniziale completata")
-                        controller.sync_playback()
+                        controller.precise_sync_playback()
 
-                        # Loop di controllo
                         while controller.running:
                             try:
-                                s.sendall(b"CHECK_SYNC")
-                                response = s.recv(1024).decode().strip()
-                                if response == "NEED_SYNC":
-                                    print("Risincronizzazione...")
+                                if controller.need_sync():
                                     s.sendall(b"SYNC_NOW")
-                                    time.sleep(0.1)
-                                    controller.sync_playback()
-                                time.sleep(1)
+                                    time.sleep(0.05)
+                                    controller.precise_sync_playback()
+                                else:
+                                    s.sendall(b"CHECK_SYNC")
+                                    response = s.recv(1024).decode().strip()
+                                    if response == "NEED_SYNC":
+                                        controller.precise_sync_playback()
+                                time.sleep(0.2)
                             except:
                                 break
 
@@ -216,7 +240,6 @@ def main_master():
         print("Nessun video trovato")
         return
 
-    # Avvia thread per la connessione allo slave
     thread = threading.Thread(
         target=handle_master_connection,
         args=(controller, SLAVE_IPS[0])
@@ -224,17 +247,14 @@ def main_master():
     thread.daemon = True
     thread.start()
 
-    # Attendi che lo slave sia connesso
     print("Attendo che lo slave sia pronto...")
     wait_start = time.time()
     while len(controller.connected_slaves) == 0:
         if time.time() - wait_start > 30:
             print("Timeout attesa slave, procedo comunque")
             break
-        print("Attendo connessione slave...")
         time.sleep(1)
 
-    # Avvia il video e mantieni il processo
     try:
         print("Avvio riproduzione in loop")
         process = controller.start_video(video_file)
@@ -242,7 +262,7 @@ def main_master():
             if not controller.check_video_running():
                 print("Riavvio video dopo crash")
                 process = controller.start_video(video_file)
-            time.sleep(1)
+            time.sleep(0.5)
     except KeyboardInterrupt:
         print("Interruzione richiesta")
         controller.stop_video()
@@ -284,17 +304,18 @@ def main_slave():
                                     break
 
                             elif message == SYNC_COMMAND:
-                                controller.sync_playback()
+                                controller.precise_sync_playback()
                                 conn.sendall(b"VIDEO_STARTED")
 
+                            elif message == "SYNC_NOW":
+                                controller.precise_sync_playback()
+                                conn.sendall(b"SYNCED")
+
                             elif message == "CHECK_SYNC":
-                                if not controller.check_video_running():
+                                if controller.need_sync() or not controller.check_video_running():
                                     conn.sendall(b"NEED_SYNC")
                                 else:
                                     conn.sendall(b"IN_SYNC")
-
-                            elif message == "SYNC_NOW":
-                                controller.sync_playback()
 
                     except Exception as e:
                         print(f"Errore gestione connessione: {e}")
@@ -309,7 +330,12 @@ if __name__ == "__main__":
     try:
         print(f"Avvio su host: {get_hostname()}")
 
-        # Verifica connessione ethernet
+        # Sincronizza l'orologio di sistema
+        if sync_system_time():
+            print("Orologio di sistema sincronizzato")
+        else:
+            print("Impossibile sincronizzare l'orologio di sistema")
+
         print("Verifica connessione ethernet...")
         for attempt in range(30):
             print(f"Tentativo {attempt + 1}/30")
@@ -321,7 +347,6 @@ if __name__ == "__main__":
             print("Impossibile stabilire connessione ethernet")
             exit(1)
 
-        # Avvia in base al ruolo
         hostname = get_hostname()
         if hostname == MASTER_HOSTNAME:
             main_master()
