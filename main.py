@@ -37,7 +37,7 @@ def is_ethernet_connected():
         return False
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero in loop con interfaccia RC"""
+    """Riproduce un video a schermo intero ottimizzato per Raspberry Pi 4"""
     command = [
         "cvlc",
         "--fullscreen",
@@ -45,30 +45,27 @@ def play_fullscreen_video(video_path):
         "--loop",
         "--no-video-title",
         "--no-video-title-show",
-        "--aout=pipewire",
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
-        "--vout", "xcb_x11",  # Renderer X11 specifico
-        "--hw-dec", "auto",    # Decodifica hardware automatica
-        "--no-video-deco",     # Disabilita decorazioni finestra
-        "--video-on-top",      # Video sempre in primo piano
-        "--gpu-power-policy=high", # Massima potenza GPU
-        "--opengl-hw",         # Usa OpenGL hardware
-        "--direct3d11-hw",     # Supporto Direct3D11
-        "--avcodec-fast",      # Decodifica veloce
-        "--avcodec-skiploopfilter", "all",  # Salta filtri loop
-        "--avcodec-skip-frame", "0",        # Non saltare frame
-        "--avcodec-skip-idct", "0",         # Non saltare IDCT
-        "--sout-x264-preset", "ultrafast",   # Preset veloce
-        "--preferred-resolution", "-1",      # Risoluzione nativa
-        "--sub-source=marq",   # Nessun sottotitolo
-        "--no-snapshot-preview", # No preview
-        "--no-overlay",         # No overlay
-        "--no-qt-system-tray",  # No system tray
+        "--vout", "mmal_vout",    # Usa il decoder hardware del Raspberry
+        "--hw-dec", "mmal",       # Decodifica hardware specifica per RPi
+        "--aout=alsa",            # Audio output per RPi
+        "--mmal-display-fps=60",  # Frame rate ottimale
+        "--no-drop-late-frames",  # Non scartare i frame in ritardo
+        "--no-overlay",           # No overlay
+        "--no-qt-system-tray",    # No system tray
+        "--mmal-layer=1",         # Layer di visualizzazione
+        "--gain", "1",            # Volume normale
         video_path
     ]
     print(f"Avvio riproduzione in loop: {video_path}")
+
+    # Imposta variabili ambiente per RPi
+    env = os.environ.copy()
+    env['DISPLAY'] = ':0'
+
+    return subprocess.Popen(command, env=env)
 
     # Imposta variabili ambiente per X11
     env = os.environ.copy()
