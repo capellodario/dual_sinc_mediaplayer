@@ -37,7 +37,7 @@ def is_ethernet_connected():
         return False
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero in loop ottimizzato per Raspberry Pi"""
+    """Riproduce un video a schermo intero in loop con interfaccia RC"""
     command = [
         "cvlc",
         "--fullscreen",
@@ -45,27 +45,17 @@ def play_fullscreen_video(video_path):
         "--loop",
         "--no-video-title",
         "--no-video-title-show",
-        "--aout=alsa",                    # Audio output per RPi
+        "--aout=pipewire",
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
-        "--vout=mmal_vout",              # Output video per RPi
-        "--mmal-display-fps=30",         # Frame rate
-        "--video-filter=scale",          # Abilita scaling
-        "--scale-mode=fit",             # Adatta allo schermo
-        "--monitor-par=16:9",           # Aspect ratio widescreen
-        "--mmal-layer=1",               # Layer di visualizzazione
-        "--no-drop-late-frames",        # Non scartare frame
-        "--no-overlay",                 # No overlay
-        "--gain", "1",                  # Volume normale
+        "--video-filter=scale",     # Aggiunto solo questo
+        "--scale-mode=fit",         # E questo
         video_path
     ]
-    print(f"Avvio riproduzione in loop scalata: {video_path}")
+    print(f"Avvio riproduzione in loop: {video_path}")
+    return subprocess.Popen(command)
 
-    env = os.environ.copy()
-    env['DISPLAY'] = ':0'
-
-    return subprocess.Popen(command, env=env)
 class VideoController:
     def __init__(self, is_master=False):
         self.is_master = is_master
