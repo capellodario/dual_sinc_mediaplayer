@@ -49,10 +49,35 @@ def play_fullscreen_video(video_path):
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
+        "--vout", "xcb_x11",  # Renderer X11 specifico
+        "--hw-dec", "auto",    # Decodifica hardware automatica
+        "--no-video-deco",     # Disabilita decorazioni finestra
+        "--video-on-top",      # Video sempre in primo piano
+        "--gpu-power-policy=high", # Massima potenza GPU
+        "--opengl-hw",         # Usa OpenGL hardware
+        "--direct3d11-hw",     # Supporto Direct3D11
+        "--avcodec-fast",      # Decodifica veloce
+        "--avcodec-skiploopfilter", "all",  # Salta filtri loop
+        "--avcodec-skip-frame", "0",        # Non saltare frame
+        "--avcodec-skip-idct", "0",         # Non saltare IDCT
+        "--sout-x264-preset", "ultrafast",   # Preset veloce
+        "--preferred-resolution", "-1",      # Risoluzione nativa
+        "--sub-source=marq",   # Nessun sottotitolo
+        "--no-snapshot-preview", # No preview
+        "--no-overlay",         # No overlay
+        "--no-qt-system-tray",  # No system tray
         video_path
     ]
     print(f"Avvio riproduzione in loop: {video_path}")
-    return subprocess.Popen(command)
+
+    # Imposta variabili ambiente per X11
+    env = os.environ.copy()
+    env['DISPLAY'] = ':0'
+    env['PULSE_SERVER'] = 'unix:/run/user/1000/pulse/native'
+    env['MESA_GL_VERSION_OVERRIDE'] = '3.3'
+    env['VDPAU_DRIVER'] = 'nvidia'  # o 'va' per Intel/AMD
+
+    return subprocess.Popen(command, env=env)
 
 class VideoController:
     def __init__(self, is_master=False):
@@ -64,6 +89,28 @@ class VideoController:
         self.rc_socket = None
         self.sync_ready = threading.Event()
         self.video_path = None
+
+        # Configura l'ambiente X11 e le prestazioni
+        try:
+            # Disabilita screen saver e power management
+            os.system("xset -dpms")
+            os.system("xset s off")
+            os.system("xset s noblank")
+
+            # Imposta la massima priorità del processo
+            os.system("renice -20 -p $$")
+
+            # Configura CPU governor per massime prestazioni
+            os.system("echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
+
+            # Pulisci la cache
+            os.system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches")
+
+            # Alloca memoria condivisa per X11
+            os.system("sudo sysctl -w vm.max_map_count=262144")
+
+        except Exception as e:
+            print(f"Errore configurazione sistema: {e}")
 
     def connect_rc(self):
         """Connette al controllo RC di VLC"""
