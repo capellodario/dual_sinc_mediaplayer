@@ -12,6 +12,7 @@ SLAVE_HOSTNAMES = ["nomehost-slave1"]  # Solo uno slave
 ETHERNET_INTERFACE = "eth0"
 MOUNT_POINT = "/media/muchomas"
 SYNC_COMMAND = "PLAY_SYNC"
+RC_PORT = 9090  # Porta per il controllo RC di VLC
 
 # Configurazione IP
 MASTER_IP = "192.168.2.1"
@@ -23,12 +24,10 @@ def get_hostname():
 def is_ethernet_connected():
     """Verifica la connessione ethernet usando NetworkManager"""
     try:
-        # Verifica lo stato della connessione dual-sync
         result = subprocess.run(['nmcli', '-g', 'GENERAL.STATE', 'con', 'show', 'dual-sync'],
                               capture_output=True, text=True)
 
         if "activated" in result.stdout.lower():
-            # Verifica ping
             target_ip = SLAVE_IPS[0] if get_hostname() == MASTER_HOSTNAME else MASTER_IP
             response = os.system(f"ping -I {ETHERNET_INTERFACE} -c 1 -W 1 {target_ip} > /dev/null 2>&1")
             return response == 0
@@ -38,16 +37,18 @@ def is_ethernet_connected():
         return False
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero in loop"""
+    """Riproduce un video a schermo intero in loop con interfaccia RC"""
     command = [
         "cvlc",
         "--fullscreen",
         "--no-osd",
-        "--loop",  # Aggiunto loop direttamente qui
+        "--loop",
         "--no-video-title",
         "--no-video-title-show",
         "--aout=pipewire",
         "--quiet",
+        "--intf", "rc",
+        "--rc-host", f"localhost:{RC_PORT}",
         video_path
     ]
     print(f"Avvio riproduzione in loop: {video_path}")
@@ -60,21 +61,68 @@ class VideoController:
         self.running = True
         self.connected_slaves = set()
         self.lock = threading.Lock()
+        self.rc_socket = None
+        self.sync_ready = threading.Event()
+        self.video_path = None
+
+    def connect_rc(self):
+        """Connette al controllo RC di VLC"""
+        try:
+            time.sleep(1)  # Attendi che VLC sia pronto
+            self.rc_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.rc_socket.connect(('localhost', RC_PORT))
+            print("Connesso al controllo RC di VLC")
+            return True
+        except Exception as e:
+            print(f"Errore connessione RC: {e}")
+            return False
+
+    def send_rc_command(self, command):
+        """Invia comando a VLC"""
+        try:
+            if self.rc_socket:
+                self.rc_socket.send(f"{command}\n".encode())
+                return True
+        except Exception as e:
+            print(f"Errore invio comando RC: {e}")
+        return False
 
     def start_video(self, video_path):
         with self.lock:
+            self.video_path = video_path
             if self.video_process:
-                self.video_process.terminate()
-                self.video_process.wait()
+                self.stop_video()
             self.video_process = play_fullscreen_video(video_path)
-            return self.video_process
+            if self.connect_rc():
+                time.sleep(0.5)  # Breve attesa per stabilizzazione
+                return self.video_process
+            return None
 
     def stop_video(self):
         with self.lock:
+            if self.rc_socket:
+                try:
+                    self.rc_socket.close()
+                except:
+                    pass
+                self.rc_socket = None
             if self.video_process:
                 self.video_process.terminate()
-                self.video_process.wait()
+                try:
+                    self.video_process.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    self.video_process.kill()
                 self.video_process = None
+
+    def sync_playback(self):
+        """Sincronizza la riproduzione"""
+        self.send_rc_command("seek 0")
+        time.sleep(0.1)
+        self.send_rc_command("play")
+
+    def check_video_running(self):
+        """Verifica se il video è in esecuzione"""
+        return self.video_process and self.video_process.poll() is None
 
 def find_first_video(mount_point=MOUNT_POINT):
     """Trova il primo video nella chiavetta USB"""
@@ -102,15 +150,28 @@ def handle_master_connection(controller, slave_ip):
                 print(f"Connesso a slave: {slave_ip}")
                 controller.connected_slaves.add(slave_ip)
 
-                # Invia solo una volta il comando di sincronizzazione
-                s.sendall(SYNC_COMMAND.encode())
-                response = s.recv(1024).decode().strip()
-                if response == "VIDEO_STARTED":
-                    print(f"Slave {slave_ip} sincronizzato e in loop")
+                # Sincronizzazione iniziale
+                s.sendall(b"PREPARE_SYNC")
+                if s.recv(1024).decode().strip() == "READY":
+                    time.sleep(2)  # Attesa per stabilizzazione
+                    s.sendall(SYNC_COMMAND.encode())
+                    if s.recv(1024).decode().strip() == "VIDEO_STARTED":
+                        print("Sincronizzazione iniziale completata")
+                        controller.sync_playback()
 
-                    # Mantieni la connessione aperta
-                    while controller.running:
-                        time.sleep(1)
+                        # Loop di controllo
+                        while controller.running:
+                            try:
+                                s.sendall(b"CHECK_SYNC")
+                                response = s.recv(1024).decode().strip()
+                                if response == "NEED_SYNC":
+                                    print("Risincronizzazione...")
+                                    s.sendall(b"SYNC_NOW")
+                                    time.sleep(0.1)
+                                    controller.sync_playback()
+                                time.sleep(1)
+                            except:
+                                break
 
         except Exception as e:
             print(f"Errore connessione slave: {e}")
@@ -144,11 +205,14 @@ def main_master():
         print("Attendo connessione slave...")
         time.sleep(1)
 
-    # Avvia il video in loop e mantienilo in esecuzione
+    # Avvia il video e mantieni il processo
     try:
         print("Avvio riproduzione in loop")
         process = controller.start_video(video_file)
-        while True:
+        while controller.running:
+            if not controller.check_video_running():
+                print("Riavvio video dopo crash")
+                process = controller.start_video(video_file)
             time.sleep(1)
     except KeyboardInterrupt:
         print("Interruzione richiesta")
@@ -169,47 +233,75 @@ def main_slave():
 
                 while controller.running:
                     conn, addr = server.accept()
-                    print(f"Connessione accettata: {addr}")
+                    if addr[0] != MASTER_IP:
+                        conn.close()
+                        continue
 
-                    data = conn.recv(1024)
-                    if data:
-                        message = data.decode().strip()
-                        if message == SYNC_COMMAND:
-                            video_file = find_first_video()
-                            if video_file:
-                                print(f"Avvio video in loop: {video_file}")
-                                controller.start_video(video_file)
+                    print(f"Connessione accettata: {addr}")
+                    try:
+                        while True:
+                            data = conn.recv(1024)
+                            if not data:
+                                break
+
+                            message = data.decode().strip()
+                            if message == "PREPARE_SYNC":
+                                video_file = find_first_video()
+                                if video_file:
+                                    controller.start_video(video_file)
+                                    conn.sendall(b"READY")
+                                else:
+                                    conn.sendall(b"NO_VIDEO")
+                                    break
+
+                            elif message == SYNC_COMMAND:
+                                controller.sync_playback()
                                 conn.sendall(b"VIDEO_STARTED")
 
-                                # Mantieni la connessione aperta
-                                while True:
-                                    time.sleep(1)
-                            else:
-                                conn.sendall(b"NO_VIDEO")
+                            elif message == "CHECK_SYNC":
+                                if not controller.check_video_running():
+                                    conn.sendall(b"NEED_SYNC")
+                                else:
+                                    conn.sendall(b"IN_SYNC")
+
+                            elif message == "SYNC_NOW":
+                                controller.sync_playback()
+
+                    except Exception as e:
+                        print(f"Errore gestione connessione: {e}")
+                    finally:
+                        conn.close()
 
         except Exception as e:
             print(f"Errore server: {e}")
             time.sleep(5)
 
 if __name__ == "__main__":
-    print(f"Avvio su host: {get_hostname()}")
+    try:
+        print(f"Avvio su host: {get_hostname()}")
 
-    # Attendi che la rete sia pronta
-    print("Verifica connessione ethernet...")
-    for attempt in range(30):
-        print(f"Tentativo {attempt + 1}/30")
-        if is_ethernet_connected():
-            print("Connessione ethernet OK")
-            break
-        time.sleep(1)
-    else:
-        print("Impossibile stabilire connessione ethernet")
-        exit(1)
+        # Verifica connessione ethernet
+        print("Verifica connessione ethernet...")
+        for attempt in range(30):
+            print(f"Tentativo {attempt + 1}/30")
+            if is_ethernet_connected():
+                print("Connessione ethernet OK")
+                break
+            time.sleep(1)
+        else:
+            print("Impossibile stabilire connessione ethernet")
+            exit(1)
 
-    # Avvia in base al ruolo
-    if get_hostname() == MASTER_HOSTNAME:
-        main_master()
-    elif get_hostname() in SLAVE_HOSTNAMES:
-        main_slave()
-    else:
-        print(f"Hostname non riconosciuto: {get_hostname()}")
+        # Avvia in base al ruolo
+        hostname = get_hostname()
+        if hostname == MASTER_HOSTNAME:
+            main_master()
+        elif hostname in SLAVE_HOSTNAMES:
+            main_slave()
+        else:
+            print(f"Hostname non riconosciuto: {hostname}")
+
+    except KeyboardInterrupt:
+        print("\nInterruzione manuale del programma")
+    except Exception as e:
+        print(f"Errore fatale: {e}")
