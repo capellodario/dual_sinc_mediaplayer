@@ -49,8 +49,6 @@ def play_fullscreen_video(video_path):
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
-        "--video-filter=scale",     # Aggiunto solo questo
-        "--scale-mode=fit",         # E questo
         video_path
     ]
     print(f"Avvio riproduzione in loop: {video_path}")
