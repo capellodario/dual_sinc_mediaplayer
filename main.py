@@ -17,17 +17,47 @@ SLAVE_READY_RESPONSE = "READY"
 SLAVE_CHECK_INTERVAL = 2  # Secondi tra i tentativi di ping degli slave
 SLAVE_READY_TIMEOUT = 10  # Secondi totali da attendere per ogni slave
 
+# Nuova configurazione IP
+MASTER_IP = "192.168.2.1"
+SLAVE_IPS = ["192.168.2.2"]
+
 def get_hostname():
     return socket.gethostname()
 
 def is_ethernet_connected(interface=ETHERNET_INTERFACE):
     try:
-        iface_info = ni.ifaddresses(interface)
-        return ni.AF_INET in iface_info
-    except ValueError:
+        with open(f"/sys/class/net/{interface}/carrier") as f:
+            if int(f.read().strip()) == 1:
+                # Verifica anche la connettività IP
+                if get_hostname() == MASTER_HOSTNAME:
+                    target_ip = SLAVE_IPS[0]
+                else:
+                    target_ip = MASTER_IP
+
+                response = os.system(f"ping -c 1 -W 1 {target_ip} > /dev/null 2>&1")
+                return response == 0
         return False
     except Exception as e:
-        print(f"Errore durante la verifica della connessione Ethernet: {e}")
+        print(f"Errore verifica ethernet: {e}")
+        return False
+
+def setup_network():
+    """Configura la rete con IP statici"""
+    try:
+        hostname = get_hostname()
+        if hostname == MASTER_HOSTNAME:
+            ip = MASTER_IP
+        else:
+            ip = SLAVE_IPS[0]
+
+        os.system(f"sudo ip link set {ETHERNET_INTERFACE} down")
+        os.system(f"sudo ip addr flush dev {ETHERNET_INTERFACE}")
+        os.system(f"sudo ip addr add {ip}/24 dev {ETHERNET_INTERFACE}")
+        os.system(f"sudo ip link set {ETHERNET_INTERFACE} up")
+        print(f"IP configurato: {ip}")
+        return True
+    except Exception as e:
+        print(f"Errore configurazione rete: {e}")
         return False
 
 def find_first_video(mount_point=MOUNT_POINT):
@@ -142,102 +172,76 @@ def start_server(is_master):
 if __name__ == "__main__":
     time.sleep(5)
     hostname = get_hostname()
-    ethernet_connected = is_ethernet_connected()
+
+    # Configura la rete prima di tutto
+    if not setup_network():
+        print("Errore nella configurazione della rete")
+        exit(1)
+
+    # Attendi che la rete sia pronta
+    print("Attendo che la connessione ethernet sia attiva...")
+    for _ in range(30):  # 30 secondi di tentativi
+        if is_ethernet_connected():
+            print("Connessione ethernet stabilita")
+            break
+        time.sleep(1)
+    else:
+        print("Impossibile stabilire la connessione ethernet")
+        exit(1)
 
     if hostname == MASTER_HOSTNAME:
-        # Comportamento da Master
-        if ethernet_connected:
-            print("(Master) Cavo Ethernet rilevato. Avvio server e attendo che gli slave siano pronti.")
-            # Avvia il server slave anche sul master
-            threading.Thread(target=start_server, args=(True,)).start()
-            time.sleep(1) # Breve attesa per l'avvio del server locale
+        # Comportamento Master
+        print("(Master) Avvio server e attendo che gli slave siano pronti.")
+        threading.Thread(target=start_server, args=(True,)).start()
+        time.sleep(1)
 
-            slave_ips = {}
-            for slave_hostname in SLAVE_HOSTNAMES:
-                try:
-                    slave_ips[slave_hostname] = socket.gethostbyname(slave_hostname)
-                except socket.gaierror:
-                    print(f"(Master) Impossibile risolvere l'IP per {slave_hostname}")
-
-            ready_slaves = {}
-            for slave_hostname, slave_ip in slave_ips.items():
-                print(f"(Master) Attendo che {slave_hostname} ({slave_ip}) sia pronto...")
-                start_time = time.time()
-                while time.time() - start_time < SLAVE_READY_TIMEOUT:
-                    if check_slave_ready(slave_ip):
-                        print(f"(Master) {slave_hostname} è pronto.")
-                        ready_slaves[slave_hostname] = slave_ip
-                        break
-                    time.sleep(SLAVE_CHECK_INTERVAL)
-                else:
-                    print(f"(Master) Timeout: {slave_hostname} non è diventato pronto entro {SLAVE_READY_TIMEOUT} secondi.")
-
-            video_file_master = find_first_video()
-            if video_file_master:
-                print(f"(Master) Trovato video: {video_file_master}")
-                # Avvia la riproduzione sul master
-                master_process = play_fullscreen_video(video_file_master)
-
-                # Invia il comando di sincronizzazione agli slave pronti
-                print("(Master) Invio comando di sincronizzazione agli slave pronti.")
-                for slave_ip in ready_slaves.values():
-                    send_sync_command(slave_ip)
-
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    if master_process:
-                        master_process.terminate()
-                        master_process.wait()
-                    print("(Master) Processo video terminato.")
+        ready_slaves = {}
+        for slave_ip in SLAVE_IPS:
+            print(f"(Master) Attendo che lo slave {slave_ip} sia pronto...")
+            start_time = time.time()
+            while time.time() - start_time < SLAVE_READY_TIMEOUT:
+                if check_slave_ready(slave_ip):
+                    print(f"(Master) Slave {slave_ip} è pronto.")
+                    ready_slaves[slave_ip] = slave_ip
+                    break
+                time.sleep(SLAVE_CHECK_INTERVAL)
             else:
-                print("(Master) Nessun video da riprodurre.")
-        else:
-            video_file_master = find_first_video()
-            if video_file_master:
-                print("(Master) Nessun cavo Ethernet rilevato. Riproduzione locale.")
-                master_process = play_fullscreen_video(video_file_master)
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    if master_process:
-                        master_process.terminate()
-                        master_process.wait()
-                    print("(Master) Processo video terminato.")
-            else:
-                print("(Master) Nessun video da riprodurre.")
+                print(f"(Master) Timeout: {slave_ip} non è pronto")
 
-    elif hostname in SLAVE_HOSTNAMES:
-        # Comportamento da Slave
-        if ethernet_connected:
-            print(f"(Slave - {hostname}) Cavo Ethernet rilevato. Avvio server e ricerca video locale.")
-            threading.Thread(target=start_server, args=(False,)).start()
-            video_file_slave = find_first_video()
-            if video_file_slave:
-                print(f"(Slave - {hostname}) Video trovato: {video_file_slave}. In attesa del comando SYNC.")
-                # Il percorso del video è ora pronto
-            else:
-                print(f"(Slave - {hostname}) Nessun video trovato localmente. In attesa del comando SYNC (ma non potrò riprodurre).")
+        video_file_master = find_first_video()
+        if video_file_master:
+            print(f"(Master) Trovato video: {video_file_master}")
+            # Avvia la riproduzione sul master
+            master_process = play_fullscreen_video(video_file_master)
+
+            # Invia il comando di sincronizzazione agli slave pronti
+            for slave_ip in ready_slaves.values():
+                send_sync_command(slave_ip)
 
             try:
                 while True:
                     time.sleep(1)
             except KeyboardInterrupt:
-                print(f"(Slave - {hostname}) Server slave terminato.")
+                if master_process:
+                    master_process.terminate()
+                    master_process.wait()
+                print("(Master) Processo terminato.")
         else:
-            video_file_slave = find_first_video()
-            if video_file_slave:
-                print(f"(Slave - {hostname}) Nessun cavo Ethernet rilevato. Riproduzione video locale.")
-                slave_process = play_fullscreen_video(video_file_slave)
-                try:
-                    while True:
-                        time.sleep(1)
-                except KeyboardInterrupt:
-                    if slave_process:
-                        slave_process.terminate()
-                        slave_process.wait()
-                    print(f"(Slave - {hostname}) Processo video terminato.")
-            else:
-                print(f"(Slave - {hostname}) Nessun video da riprodurre localmente.")
+            print("(Master) Nessun video da riprodurre.")
+
+    elif hostname in SLAVE_HOSTNAMES:
+        # Comportamento Slave
+        print(f"(Slave - {hostname}) Avvio server e ricerca video locale.")
+        threading.Thread(target=start_server, args=(False,)).start()
+
+        video_file_slave = find_first_video()
+        if video_file_slave:
+            print(f"(Slave - {hostname}) Video trovato: {video_file_slave}. In attesa del comando SYNC.")
+        else:
+            print(f"(Slave - {hostname}) Nessun video trovato localmente.")
+
+        try:
+            while True:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            print(f"(Slave - {hostname}) Server terminato.")
