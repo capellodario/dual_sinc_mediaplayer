@@ -125,19 +125,48 @@ class VideoController:
         return self.video_process and self.video_process.poll() is None
 
 def find_first_video(mount_point=MOUNT_POINT):
-    """Trova il primo video nella chiavetta USB"""
-    chiavette = glob.glob(f"{mount_point}/rasp_key*")
-    if chiavette:
-        first_chiavetta = chiavette[0]
+    """Trova il primo video nella prima chiavetta USB disponibile"""
+    try:
+        # Verifica che il punto di mount esista
+        if not os.path.exists(mount_point):
+            print(f"Directory {mount_point} non trovata")
+            return None
+
+        # Cerca tutte le directory nella cartella di mount
+        mounted_devices = []
+        for device in os.listdir(mount_point):
+            device_path = os.path.join(mount_point, device)
+
+            # Verifica che sia una directory e un dispositivo rimovibile
+            if os.path.isdir(device_path):
+                # Puoi aggiungere qui ulteriori verifiche per assicurarti che sia una USB
+                mounted_devices.append(device_path)
+
+        if not mounted_devices:
+            print("Nessuna chiavetta USB trovata")
+            return None
+
         video_extensions = ['.mp4', '.avi', '.mkv', '.mov']
-        for root, _, files in os.walk(first_chiavetta):
-            for file in files:
-                if any(file.lower().endswith(ext) for ext in video_extensions):
-                    return os.path.join(root, file)
-        print(f"Nessun video trovato in: {first_chiavetta}")
+        print(f"Dispositivi trovati: {mounted_devices}")
+
+        # Cerca in ogni dispositivo montato
+        for device_path in mounted_devices:
+            print(f"Cerco video in: {device_path}")
+
+            # Cerca ricorsivamente nella directory
+            for root, _, files in os.walk(device_path):
+                for file in files:
+                    if any(file.lower().endswith(ext) for ext in video_extensions):
+                        video_path = os.path.join(root, file)
+                        print(f"Video trovato: {video_path}")
+                        return video_path
+
+        print("Nessun video trovato nelle chiavette USB")
         return None
-    print("Nessuna chiavetta USB 'rasp_key*' trovata")
-    return None
+
+    except Exception as e:
+        print(f"Errore durante la ricerca del video: {e}")
+        return None
 
 def handle_master_connection(controller, slave_ip):
     """Gestisce la connessione master-slave"""
