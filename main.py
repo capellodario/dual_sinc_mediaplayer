@@ -37,7 +37,7 @@ def is_ethernet_connected():
         return False
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero ottimizzato per Raspberry Pi 4"""
+    """Riproduce un video a schermo intero in loop ottimizzato per Raspberry Pi"""
     command = [
         "cvlc",
         "--fullscreen",
@@ -45,37 +45,27 @@ def play_fullscreen_video(video_path):
         "--loop",
         "--no-video-title",
         "--no-video-title-show",
+        "--aout=alsa",                    # Audio output per RPi
         "--quiet",
         "--intf", "rc",
         "--rc-host", f"localhost:{RC_PORT}",
-        "--vout", "mmal_vout",    # Usa il decoder hardware del Raspberry
-        "--hw-dec", "mmal",       # Decodifica hardware specifica per RPi
-        "--aout=alsa",            # Audio output per RPi
-        "--mmal-display-fps=60",  # Frame rate ottimale
-        "--no-drop-late-frames",  # Non scartare i frame in ritardo
-        "--no-overlay",           # No overlay
-        "--no-qt-system-tray",    # No system tray
-        "--mmal-layer=1",         # Layer di visualizzazione
-        "--gain", "1",            # Volume normale
+        "--vout=mmal_vout",              # Output video per RPi
+        "--mmal-display-fps=30",         # Frame rate
+        "--video-filter=scale",          # Abilita scaling
+        "--scale-mode=fit",             # Adatta allo schermo
+        "--monitor-par=16:9",           # Aspect ratio widescreen
+        "--mmal-layer=1",               # Layer di visualizzazione
+        "--no-drop-late-frames",        # Non scartare frame
+        "--no-overlay",                 # No overlay
+        "--gain", "1",                  # Volume normale
         video_path
     ]
-    print(f"Avvio riproduzione in loop: {video_path}")
+    print(f"Avvio riproduzione in loop scalata: {video_path}")
 
-    # Imposta variabili ambiente per RPi
     env = os.environ.copy()
     env['DISPLAY'] = ':0'
 
     return subprocess.Popen(command, env=env)
-
-    # Imposta variabili ambiente per X11
-    env = os.environ.copy()
-    env['DISPLAY'] = ':0'
-    env['PULSE_SERVER'] = 'unix:/run/user/1000/pulse/native'
-    env['MESA_GL_VERSION_OVERRIDE'] = '3.3'
-    env['VDPAU_DRIVER'] = 'nvidia'  # o 'va' per Intel/AMD
-
-    return subprocess.Popen(command, env=env)
-
 class VideoController:
     def __init__(self, is_master=False):
         self.is_master = is_master
@@ -86,28 +76,6 @@ class VideoController:
         self.rc_socket = None
         self.sync_ready = threading.Event()
         self.video_path = None
-
-        # Configura l'ambiente X11 e le prestazioni
-        try:
-            # Disabilita screen saver e power management
-            os.system("xset -dpms")
-            os.system("xset s off")
-            os.system("xset s noblank")
-
-            # Imposta la massima priorità del processo
-            os.system("renice -20 -p $$")
-
-            # Configura CPU governor per massime prestazioni
-            os.system("echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor")
-
-            # Pulisci la cache
-            os.system("sync; echo 3 | sudo tee /proc/sys/vm/drop_caches")
-
-            # Alloca memoria condivisa per X11
-            os.system("sudo sysctl -w vm.max_map_count=262144")
-
-        except Exception as e:
-            print(f"Errore configurazione sistema: {e}")
 
     def connect_rc(self):
         """Connette al controllo RC di VLC"""
