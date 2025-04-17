@@ -38,17 +38,34 @@ def is_ethernet_connected():
         return False
 
 def play_fullscreen_video(video_path):
-    """Riproduce un video a schermo intero"""
+    """Riproduce un video a schermo intero con transizioni più fluide"""
     command = [
         "cvlc",
         "--fullscreen",
         "--no-osd",
+        "--no-video-title",
+        "--no-video-title-show",
+        "--no-quiet",
         "--play-and-exit",
+        "--no-keyboard-events",
+        "--no-mouse-events",
         "--aout=pipewire",
+        "--vout=xcb_x11",  # o "vout=x11" se xcb_x11 non funziona
+        "--no-snapshot-preview",
+        "--no-overlay",
+        "--no-qt-privacy-ask",
+        "--qt-minimal-view",
+        "--no-qt-system-tray",
         video_path
     ]
     print(f"Avvio riproduzione: {video_path}")
-    return subprocess.Popen(command)
+
+    # Imposta DISPLAY se non è già impostato
+    env = os.environ.copy()
+    if 'DISPLAY' not in env:
+        env['DISPLAY'] = ':0'
+
+    return subprocess.Popen(command, env=env)
 
 class VideoController:
     def __init__(self, is_master=False):
@@ -57,21 +74,53 @@ class VideoController:
         self.running = True
         self.connected_slaves = set()
         self.lock = threading.Lock()
+        self.is_playing = False
+
+        # Preparazione ambiente X11
+        os.system("xset -dpms")     # Disabilita power management
+        os.system("xset s off")     # Disabilita screensaver
+        os.system("xset s noblank") # Disabilita screen blanking
 
     def start_video(self, video_path):
         with self.lock:
+            if self.is_playing and self.video_process and self.video_process.poll() is None:
+                print("Video già in riproduzione")
+                return None
+
             if self.video_process:
-                self.video_process.terminate()
-                self.video_process.wait()
+                try:
+                    self.video_process.terminate()
+                    self.video_process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.video_process.kill()
+                    self.video_process.wait()
+                self.video_process = None
+
+            time.sleep(0.1)
+
+            print(f"Avvio riproduzione: {video_path}")
             self.video_process = play_fullscreen_video(video_path)
+            self.is_playing = True
             return self.video_process
 
     def stop_video(self):
         with self.lock:
             if self.video_process:
-                self.video_process.terminate()
-                self.video_process.wait()
+                try:
+                    self.video_process.terminate()
+                    self.video_process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    self.video_process.kill()
+                    self.video_process.wait()
                 self.video_process = None
+            self.is_playing = False
+            time.sleep(0.1)
+
+    def __del__(self):
+        # Ripristina le impostazioni X11 alla chiusura
+        os.system("xset +dpms")
+        os.system("xset s on")
+        os.system("xset s blank")
 
 def find_first_video(mount_point=MOUNT_POINT):
     """Trova il primo video nella chiavetta USB"""
@@ -99,12 +148,17 @@ def handle_master_connection(controller, slave_ip):
                 print(f"Connesso a slave: {slave_ip}")
                 controller.connected_slaves.add(slave_ip)
 
+                # Invia il comando SYNC solo una volta all'inizio
+                s.sendall(SYNC_COMMAND.encode())
+                response = s.recv(1024).decode().strip()
+                if response == "VIDEO_STARTED":
+                    print(f"Slave {slave_ip} sincronizzato")
+
+                # Mantieni la connessione aperta
                 while controller.running:
                     try:
-                        s.sendall(SYNC_COMMAND.encode())
+                        s.sendall(b"HEARTBEAT")
                         response = s.recv(1024).decode().strip()
-                        if response == "VIDEO_STARTED":
-                            print(f"Slave {slave_ip} sincronizzato")
                         time.sleep(1)
                     except socket.error as e:
                         print(f"Errore comunicazione: {e}")
@@ -125,9 +179,8 @@ def handle_slave_connection(controller, conn, addr):
                 break
 
             message = data.decode().strip()
-            print(f"Comando ricevuto: {message}")
 
-            if message == SYNC_COMMAND:
+            if message == SYNC_COMMAND and not controller.is_playing:
                 video_file = find_first_video()
                 if video_file:
                     print(f"Avvio video: {video_file}")
@@ -135,11 +188,21 @@ def handle_slave_connection(controller, conn, addr):
                     conn.sendall(b"VIDEO_STARTED")
                 else:
                     conn.sendall(b"NO_VIDEO")
+            elif message == "HEARTBEAT":
+                conn.sendall(b"ALIVE")
+
+                if controller.video_process and controller.video_process.poll() is not None:
+                    print("Video terminato, riavvio...")
+                    controller.is_playing = False
+                    video_file = find_first_video()
+                    if video_file:
+                        controller.start_video(video_file)
 
     except Exception as e:
         print(f"Errore connessione: {e}")
     finally:
         conn.close()
+        controller.is_playing = False
         print(f"Connessione chiusa: {addr}")
 
 def main_master():
@@ -151,7 +214,6 @@ def main_master():
         print("Nessun video trovato")
         return
 
-    # Avvia thread per la connessione allo slave
     thread = threading.Thread(
         target=handle_master_connection,
         args=(controller, SLAVE_IPS[0])
@@ -163,7 +225,6 @@ def main_master():
         try:
             print("Avvio ciclo riproduzione")
 
-            # Attendi connessione slave con timeout
             wait_start = time.time()
             while len(controller.connected_slaves) == 0:
                 if time.time() - wait_start > 30:
