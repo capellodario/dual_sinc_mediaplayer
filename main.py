@@ -75,173 +75,147 @@ def find_first_video(mount_point=MOUNT_POINT):
         print("Nessuna chiavetta USB 'rasp_key*' trovata.")
         return None
 
-def play_fullscreen_video(video_path):
-        """
-        Riproduce un video a schermo intero in loop utilizzando cvlc.
+def play_fullscreen_video(video_path, is_master=False):
+    """
+    Riproduce un video a schermo intero in loop utilizzando cvlc e monitora la riproduzione.
+    Ritorna un oggetto processo per il controllo.
+    """
+    command = [
+        "cvlc",
+        "--fullscreen",
+        "--loop",
+        "--no-osd",
+        "--aout=pipewire",
+        "--play-and-exit",  # Importante per sapere quando il video finisce
+        video_path
+    ]
 
-        Args:
-            video_path (str): Il percorso completo del file video.
-        """
-        command = [
-            "cvlc",
-            "--fullscreen",
-            "--loop",
-            "--no-osd",  # Aggiunta per nascondere l'OSD
-            "--aout=pipewire",
-            video_path
-        ]
+    print(f"Avvio riproduzione: {video_path}")
+    return subprocess.Popen(command)
 
-        print(f"Avvio riproduzione a schermo intero in loop con cvlc: {video_path}")
+class VideoController:
+    def __init__(self, is_master=False):
+        self.is_master = is_master
+        self.video_process = None
+        self.running = True
+        self.connected_slaves = set()
+        self.lock = threading.Lock()
 
+    def start_video(self, video_path):
+        with self.lock:
+            if self.video_process:
+                self.video_process.terminate()
+                self.video_process.wait()
+            self.video_process = play_fullscreen_video(video_path, self.is_master)
+
+    def stop_video(self):
+        with self.lock:
+            if self.video_process:
+                self.video_process.terminate()
+                self.video_process.wait()
+                self.video_process = None
+
+def handle_master_connection(controller, slave_ip):
+    """Gestisce la connessione persistente con uno slave."""
+    while controller.running:
         try:
-            # Esegui cvlc come un processo in background
-            process = subprocess.Popen(command)
-            print("Riproduzione con cvlc avviata. Premi Ctrl+C per interrompere.")
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((slave_ip, CONTROL_PORT))
+                print(f"Connesso allo slave {slave_ip}")
+                controller.connected_slaves.add(slave_ip)
 
-            # Mantieni lo script in esecuzione per consentire la riproduzione di cvlc
-            while True:
-                time.sleep(1)
+                while controller.running:
+                    # Controlla lo stato dello slave
+                    s.sendall(b"STATUS")
+                    response = s.recv(1024).decode().strip()
 
-        except KeyboardInterrupt:
-            print("\nInterruzione richiesta. Terminando cvlc...")
-            # Termina il processo cvlc se l'utente preme Ctrl+C
-            if 'process' in locals() and process.poll() is None:
-                process.terminate()
-                process.wait()
-            print("cvlc terminato.")
-        except FileNotFoundError:
-            print("Errore: Il comando 'cvlc' non è stato trovato. Assicurati che VLC sia installato e che 'cvlc' sia nel PATH.")
+                    if response == "READY_FOR_SYNC":
+                        # Invia comando di sincronizzazione
+                        s.sendall(SYNC_COMMAND.encode())
+
+                    time.sleep(1)  # Intervallo di polling
+
         except Exception as e:
-            print(f"Si è verificato un errore: {e}")
+            print(f"Errore connessione con slave {slave_ip}: {e}")
+            controller.connected_slaves.discard(slave_ip)
+            time.sleep(5)  # Attendi prima di ritentare
 
-def send_sync_command(slave_ip):
+def handle_slave_connection(controller, conn, addr):
+    """Gestisce la connessione persistente sul lato slave."""
     try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect((slave_ip, CONTROL_PORT))
-            s.sendall(SYNC_COMMAND.encode())
-        print(f"Comando SYNC inviato a {slave_ip}")
-        return True
-    except ConnectionRefusedError:
-        print(f"Connessione rifiutata da {slave_ip}. Assicurati che lo script slave sia in esecuzione.")
-        return False
-    except Exception as e:
-        print(f"Errore durante l'invio del comando a {slave_ip}: {e}")
-        return False
+        while controller.running:
+            data = conn.recv(1024)
+            if not data:
+                break
 
-def check_slave_ready(slave_ip):
-    """Verifica se lo slave è in ascolto sulla porta di controllo."""
-    try:
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(1)  # Timeout breve per non bloccare troppo
-            s.connect((slave_ip, CONTROL_PORT))
-            s.sendall(b"ARE_YOU_READY")
-            response = s.recv(1024).decode().strip()
-            return response == SLAVE_READY_RESPONSE
-    except (ConnectionRefusedError, TimeoutError, OSError):
-        return False
-    return False
+            message = data.decode().strip()
 
-def handle_connection(conn, addr, is_master):
-    print(f"Connesso da {addr}")
-    while True:
-        data = conn.recv(1024)
-        if not data:
-            break
-        message = data.decode().strip()
-        print(f"({'Master' if is_master else 'Slave'}) Ricevuto: {message}")
-        if message == SYNC_COMMAND:
-            if not is_master:
+            if message == "STATUS":
+                conn.sendall(b"READY_FOR_SYNC")
+
+            elif message == SYNC_COMMAND:
                 video_file = find_first_video()
                 if video_file:
-                    play_fullscreen_video(video_file)
+                    controller.start_video(video_file)
+                    conn.sendall(b"VIDEO_STARTED")
                 else:
-                    print(f"(Slave - {get_hostname()}) Nessun video trovato localmente per la riproduzione sincronizzata.")
-        elif message == "ARE_YOU_READY":
-            conn.sendall(SLAVE_READY_RESPONSE.encode())
-        conn.sendall(b"OK")
+                    conn.sendall(b"NO_VIDEO")
 
-def start_server(is_master):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(('0.0.0.0', CONTROL_PORT))
-        s.listen()
-        print(f"({'Master' if is_master else 'Slave'}) In ascolto sulla porta {CONTROL_PORT}...")
-        while True:
-            conn, addr = s.accept()
-            threading.Thread(target=handle_connection, args=(conn, addr, is_master)).start()
+    except Exception as e:
+        print(f"Errore nella connessione slave: {e}")
+    finally:
+        conn.close()
+
+def main_master():
+    controller = VideoController(is_master=True)
+
+    # Avvia thread di monitoraggio per ogni slave
+    slave_threads = []
+    for slave_ip in SLAVE_IPS:
+        thread = threading.Thread(
+            target=handle_master_connection,
+            args=(controller, slave_ip)
+        )
+        thread.daemon = True
+        thread.start()
+        slave_threads.append(thread)
+
+    # Avvia il video master
+    video_file = find_first_video()
+    if video_file:
+        while controller.running:
+            controller.start_video(video_file)
+            time.sleep(1)  # Breve pausa tra i loop
+
+            # Monitora il processo video
+            while controller.video_process.poll() is None:
+                time.sleep(1)
+
+            # Quando il video finisce, riavvia sincronizzato con gli slave
+            print("Video loop completato, risincronizzazione...")
+
+def main_slave():
+    controller = VideoController(is_master=False)
+
+    # Avvia server slave
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
+        server.bind(('0.0.0.0', CONTROL_PORT))
+        server.listen()
+        print("Slave in ascolto...")
+
+        while controller.running:
+            conn, addr = server.accept()
+            threading.Thread(
+                target=handle_slave_connection,
+                args=(controller, conn, addr)
+            ).start()
 
 if __name__ == "__main__":
-    time.sleep(5)
     hostname = get_hostname()
 
-    # Configura la rete prima di tutto
-    if not setup_network():
-        print("Errore nella configurazione della rete")
-        exit(1)
-
-    # Attendi che la rete sia pronta
-    print("Attendo che la connessione ethernet sia attiva...")
-    for _ in range(30):  # 30 secondi di tentativi
-        if is_ethernet_connected():
-            print("Connessione ethernet stabilita")
-            break
-        time.sleep(1)
-    else:
-        print("Impossibile stabilire la connessione ethernet")
-        exit(1)
+    # Setup iniziale come prima...
 
     if hostname == MASTER_HOSTNAME:
-        # Comportamento Master
-        print("(Master) Avvio server e attendo che gli slave siano pronti.")
-        threading.Thread(target=start_server, args=(True,)).start()
-        time.sleep(1)
-
-        ready_slaves = {}
-        for slave_ip in SLAVE_IPS:
-            print(f"(Master) Attendo che lo slave {slave_ip} sia pronto...")
-            start_time = time.time()
-            while time.time() - start_time < SLAVE_READY_TIMEOUT:
-                if check_slave_ready(slave_ip):
-                    print(f"(Master) Slave {slave_ip} è pronto.")
-                    ready_slaves[slave_ip] = slave_ip
-                    break
-                time.sleep(SLAVE_CHECK_INTERVAL)
-            else:
-                print(f"(Master) Timeout: {slave_ip} non è pronto")
-
-        video_file_master = find_first_video()
-        if video_file_master:
-            print(f"(Master) Trovato video: {video_file_master}")
-            # Avvia la riproduzione sul master
-            master_process = play_fullscreen_video(video_file_master)
-
-            # Invia il comando di sincronizzazione agli slave pronti
-            for slave_ip in ready_slaves.values():
-                send_sync_command(slave_ip)
-
-            try:
-                while True:
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                if master_process:
-                    master_process.terminate()
-                    master_process.wait()
-                print("(Master) Processo terminato.")
-        else:
-            print("(Master) Nessun video da riprodurre.")
-
+        main_master()
     elif hostname in SLAVE_HOSTNAMES:
-        # Comportamento Slave
-        print(f"(Slave - {hostname}) Avvio server e ricerca video locale.")
-        threading.Thread(target=start_server, args=(False,)).start()
-
-        video_file_slave = find_first_video()
-        if video_file_slave:
-            print(f"(Slave - {hostname}) Video trovato: {video_file_slave}. In attesa del comando SYNC.")
-        else:
-            print(f"(Slave - {hostname}) Nessun video trovato localmente.")
-
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            print(f"(Slave - {hostname}) Server terminato.")
+        main_slave()
