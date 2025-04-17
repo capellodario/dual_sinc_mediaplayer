@@ -125,7 +125,7 @@ class VideoController:
         return self.video_process and self.video_process.poll() is None
 
 def find_first_video(mount_point=MOUNT_POINT):
-    """Trova il primo video nella prima chiavetta USB disponibile"""
+    """Trova il primo video nella prima chiavetta USB disponibile, escludendo i file che iniziano con ._"""
     try:
         # Verifica che il punto di mount esista
         if not os.path.exists(mount_point):
@@ -156,16 +156,13 @@ def find_first_video(mount_point=MOUNT_POINT):
             # Cerca ricorsivamente nella directory
             for root, _, files in os.walk(device_path):
                 for file in files:
-                    if any(file.lower().endswith(ext) for ext in video_extensions):
+                    # Verifica che il file non inizi con ._ e abbia l'estensione corretta
+                    if not file.startswith('._') and any(file.lower().endswith(ext) for ext in video_extensions):
                         video_path = os.path.join(root, file)
                         print(f"Video trovato: {video_path}")
                         return video_path
 
         print("Nessun video trovato nelle chiavette USB")
-        return None
-
-    except Exception as e:
-        print(f"Errore durante la ricerca del video: {e}")
         return None
 
 def handle_master_connection(controller, slave_ip):
