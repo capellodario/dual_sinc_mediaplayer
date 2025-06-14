@@ -18,6 +18,10 @@ RC_PORT = 9090  # Porta per il controllo RC di VLC
 MASTER_IP = "192.168.2.1"
 SLAVE_IPS = ["192.168.2.2"]
 
+# Configurazione timeout per fallback
+ETHERNET_CHECK_TIMEOUT = 30  # Secondi per verificare ethernet
+SLAVE_CONNECTION_TIMEOUT = 30  # Secondi per attendere connessione slave
+
 def get_hostname():
     return socket.gethostname()
 
@@ -54,6 +58,22 @@ def play_fullscreen_video(video_path):
     print(f"Avvio riproduzione in loop: {video_path}")
     return subprocess.Popen(command)
 
+def play_standalone_video(video_path):
+    """Riproduce un video a schermo intero in loop senza controllo RC (modalità standalone)"""
+    command = [
+        "cvlc",
+        "--fullscreen",
+        "--no-osd",
+        "--loop",
+        "--no-video-title",
+        "--no-video-title-show",
+        "--aout=pipewire",
+        "--quiet",
+        video_path
+    ]
+    print(f"Avvio riproduzione standalone in loop: {video_path}")
+    return subprocess.Popen(command)
+
 class VideoController:
     def __init__(self, is_master=False):
         self.is_master = is_master
@@ -64,6 +84,7 @@ class VideoController:
         self.rc_socket = None
         self.sync_ready = threading.Event()
         self.video_path = None
+        self.standalone_mode = False
 
     def connect_rc(self):
         """Connette al controllo RC di VLC"""
@@ -87,16 +108,24 @@ class VideoController:
             print(f"Errore invio comando RC: {e}")
         return False
 
-    def start_video(self, video_path):
+    def start_video(self, video_path, standalone=False):
         with self.lock:
             self.video_path = video_path
+            self.standalone_mode = standalone
             if self.video_process:
                 self.stop_video()
-            self.video_process = play_fullscreen_video(video_path)
-            if self.connect_rc():
-                time.sleep(0.5)  # Breve attesa per stabilizzazione
-                return self.video_process
-            return None
+
+            if standalone:
+                print("Avvio video in modalità standalone (senza sync)")
+                self.video_process = play_standalone_video(video_path)
+            else:
+                self.video_process = play_fullscreen_video(video_path)
+                if self.connect_rc():
+                    time.sleep(0.5)  # Breve attesa per stabilizzazione
+                    return self.video_process
+                return None
+
+            return self.video_process
 
     def stop_video(self):
         with self.lock:
@@ -116,9 +145,10 @@ class VideoController:
 
     def sync_playback(self):
         """Sincronizza la riproduzione"""
-        self.send_rc_command("seek 0")
-        time.sleep(0.1)
-        self.send_rc_command("play")
+        if not self.standalone_mode:
+            self.send_rc_command("seek 0")
+            time.sleep(0.1)
+            self.send_rc_command("play")
 
     def check_video_running(self):
         """Verifica se il video è in esecuzione"""
@@ -182,6 +212,8 @@ def find_first_video(mount_point=MOUNT_POINT):
 def handle_master_connection(controller, slave_ip):
     """Gestisce la connessione master-slave"""
     print(f"Tentativo connessione a slave: {slave_ip}")
+    connection_established = False
+
     while controller.running:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -189,6 +221,7 @@ def handle_master_connection(controller, slave_ip):
                 s.connect((slave_ip, CONTROL_PORT))
                 print(f"Connesso a slave: {slave_ip}")
                 controller.connected_slaves.add(slave_ip)
+                connection_established = True
 
                 # Sincronizzazione iniziale
                 s.sendall(b"PREPARE_SYNC")
@@ -216,6 +249,8 @@ def handle_master_connection(controller, slave_ip):
         except Exception as e:
             print(f"Errore connessione slave: {e}")
             controller.connected_slaves.discard(slave_ip)
+            if not connection_established:
+                break  # Esci se non è mai riuscito a connettersi
             time.sleep(5)
 
 def main_master():
@@ -227,32 +262,49 @@ def main_master():
         print("Nessun video trovato")
         return
 
-    # Avvia thread per la connessione allo slave
-    thread = threading.Thread(
-        target=handle_master_connection,
-        args=(controller, SLAVE_IPS[0])
-    )
-    thread.daemon = True
-    thread.start()
+    print("Verifica connessione ethernet per sync...")
+    ethernet_ok = is_ethernet_connected()
 
-    # Attendi che lo slave sia connesso
-    print("Attendo che lo slave sia pronto...")
-    wait_start = time.time()
-    while len(controller.connected_slaves) == 0:
-        if time.time() - wait_start > 30:
-            print("Timeout attesa slave, procedo comunque")
-            break
-        print("Attendo connessione slave...")
-        time.sleep(1)
+    if ethernet_ok:
+        # Avvia thread per la connessione allo slave
+        thread = threading.Thread(
+            target=handle_master_connection,
+            args=(controller, SLAVE_IPS[0])
+        )
+        thread.daemon = True
+        thread.start()
+
+        # Attendi che lo slave sia connesso
+        print("Attendo che lo slave sia pronto...")
+        wait_start = time.time()
+        slave_connected = False
+
+        while len(controller.connected_slaves) == 0:
+            if time.time() - wait_start > SLAVE_CONNECTION_TIMEOUT:
+                print("Timeout attesa slave, avvio modalità standalone")
+                break
+            print("Attendo connessione slave...")
+            time.sleep(1)
+
+        if len(controller.connected_slaves) > 0:
+            slave_connected = True
+            print("Slave connesso, modalità sincronizzata")
+
+    # Determina la modalità di avvio
+    standalone_mode = not ethernet_ok or len(controller.connected_slaves) == 0
+
+    if standalone_mode:
+        print("MODALITÀ STANDALONE: Avvio video senza sincronizzazione")
+    else:
+        print("MODALITÀ SYNC: Avvio video con sincronizzazione")
 
     # Avvia il video e mantieni il processo
     try:
-        print("Avvio riproduzione in loop")
-        process = controller.start_video(video_file)
+        process = controller.start_video(video_file, standalone=standalone_mode)
         while controller.running:
             if not controller.check_video_running():
                 print("Riavvio video dopo crash")
-                process = controller.start_video(video_file)
+                process = controller.start_video(video_file, standalone=standalone_mode)
             time.sleep(1)
     except KeyboardInterrupt:
         print("Interruzione richiesta")
@@ -261,23 +313,53 @@ def main_master():
 def main_slave():
     """Funzione principale dello slave"""
     controller = VideoController(is_master=False)
-    print("Avvio slave in ascolto...")
+    print("Avvio slave...")
 
-    while controller.running:
+    # Verifica se ethernet è disponibile
+    ethernet_ok = is_ethernet_connected()
+
+    if not ethernet_ok:
+        print("MODALITÀ STANDALONE: Ethernet non disponibile, avvio video senza sync")
+        video_file = find_first_video()
+        if video_file:
+            try:
+                process = controller.start_video(video_file, standalone=True)
+                while controller.running:
+                    if not controller.check_video_running():
+                        print("Riavvio video dopo crash")
+                        process = controller.start_video(video_file, standalone=True)
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("Interruzione richiesta")
+                controller.stop_video()
+        else:
+            print("Nessun video trovato per modalità standalone")
+        return
+
+    print("Ethernet OK, modalità sync - Slave in ascolto...")
+
+    # Timeout per verificare se arriva una connessione dal master
+    server_timeout = time.time() + SLAVE_CONNECTION_TIMEOUT
+    fallback_to_standalone = True
+
+    while controller.running and time.time() < server_timeout:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server:
                 server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+                server.settimeout(5)  # Timeout per accept
                 server.bind(('0.0.0.0', CONTROL_PORT))
                 server.listen(1)
                 print("Slave in ascolto...")
 
-                while controller.running:
+                try:
                     conn, addr = server.accept()
                     if addr[0] != MASTER_IP:
                         conn.close()
                         continue
 
-                    print(f"Connessione accettata: {addr}")
+                    fallback_to_standalone = False  # Connessione ricevuta
+                    print(f"Connessione master accettata: {addr}")
+
                     try:
                         while True:
                             data = conn.recv(1024)
@@ -312,27 +394,49 @@ def main_slave():
                     finally:
                         conn.close()
 
+                except socket.timeout:
+                    print("Timeout attesa connessione master")
+                    continue
+
         except Exception as e:
             print(f"Errore server: {e}")
-            time.sleep(5)
+            time.sleep(1)
+
+    # Se non è arrivata nessuna connessione, avvia modalità standalone
+    if fallback_to_standalone:
+        print("MODALITÀ STANDALONE: Nessuna connessione dal master, avvio video autonomo")
+        video_file = find_first_video()
+        if video_file:
+            try:
+                process = controller.start_video(video_file, standalone=True)
+                while controller.running:
+                    if not controller.check_video_running():
+                        print("Riavvio video dopo crash")
+                        process = controller.start_video(video_file, standalone=True)
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                print("Interruzione richiesta")
+                controller.stop_video()
 
 if __name__ == "__main__":
     try:
         print(f"Avvio su host: {get_hostname()}")
 
-        # Verifica connessione ethernet
+        # Verifica connessione ethernet (con timeout ridotto)
         print("Verifica connessione ethernet...")
-        for attempt in range(30):
-            print(f"Tentativo {attempt + 1}/30")
+        ethernet_connected = False
+        for attempt in range(ETHERNET_CHECK_TIMEOUT):
+            print(f"Tentativo {attempt + 1}/{ETHERNET_CHECK_TIMEOUT}")
             if is_ethernet_connected():
                 print("Connessione ethernet OK")
+                ethernet_connected = True
                 break
             time.sleep(1)
-        else:
-            print("Impossibile stabilire connessione ethernet")
-            exit(1)
 
-        # Avvia in base al ruolo
+        if not ethernet_connected:
+            print("Connessione ethernet non disponibile - modalità standalone attivata")
+
+        # Avvia in base al ruolo (anche senza ethernet)
         hostname = get_hostname()
         if hostname == MASTER_HOSTNAME:
             main_master()
@@ -340,6 +444,24 @@ if __name__ == "__main__":
             main_slave()
         else:
             print(f"Hostname non riconosciuto: {hostname}")
+            # Anche per hostname non riconosciuti, prova modalità standalone
+            print("Tentativo avvio modalità standalone...")
+            video_file = find_first_video()
+            if video_file:
+                controller = VideoController(is_master=False)
+                try:
+                    process = controller.start_video(video_file, standalone=True)
+                    print("Video avviato in modalità standalone")
+                    while controller.running:
+                        if not controller.check_video_running():
+                            print("Riavvio video dopo crash")
+                            process = controller.start_video(video_file, standalone=True)
+                        time.sleep(1)
+                except KeyboardInterrupt:
+                    print("Interruzione richiesta")
+                    controller.stop_video()
+            else:
+                print("Nessun video trovato")
 
     except KeyboardInterrupt:
         print("\nInterruzione manuale del programma")
